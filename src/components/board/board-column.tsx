@@ -54,8 +54,8 @@ export function BoardColumn({
       }`}
     >
       <header className="flex items-center justify-between px-3 py-3">
-        <h3 className="text-sm font-semibold text-zinc-800">{column.title}</h3>
-        <span className="rounded-full bg-white/80 px-2 py-0.5 text-xs font-medium text-zinc-600">
+        <h3 className="text-sm font-semibold text-[#14233B]">{column.title}</h3>
+        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${column.pill}`}>
           {tasks.length}
         </span>
       </header>

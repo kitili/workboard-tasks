@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import styles from "./sign-in.module.css";
 
 type Step = "staff" | "email" | "code" | "name";
@@ -17,7 +16,6 @@ const staffErrors: Record<string, string> = {
 };
 
 export function SignIn({ deliveryConfigured = true }: { deliveryConfigured?: boolean }) {
-  const router = useRouter();
   const [step, setStep] = useState<Step>("staff");
   const [email, setEmail] = useState("");
   const [staffId, setStaffId] = useState("");
@@ -28,8 +26,7 @@ export function SignIn({ deliveryConfigured = true }: { deliveryConfigured?: boo
   const [pending, setPending] = useState(false);
 
   function enter() {
-    router.push("/today");
-    router.refresh();
+    window.location.assign("/today");
   }
 
   async function submitStaff(e: React.FormEvent) {

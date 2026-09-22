@@ -1,7 +1,7 @@
 import { normalizeStaffEmail } from "@/lib/email";
 
 const DEFAULT_STAFF_API_URL = "https://silverleafacademy.ed-space.net/api/general/v1/staff";
-const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_TTL_MS = 30 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 10_000;
 const NEGATIVE_CACHE_MS = 15_000;
 

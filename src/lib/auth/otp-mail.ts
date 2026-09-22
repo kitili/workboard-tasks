@@ -4,17 +4,21 @@ export function isSmtpConfigured(): boolean {
   return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
 }
 
+export function isResendConfigured(): boolean {
+  return Boolean(process.env.RESEND_API_KEY);
+}
+
 export function isOtpSignInAvailable(): boolean {
-  return isSmtpConfigured() || process.env.NODE_ENV !== "production";
+  return isSmtpConfigured() || isResendConfigured() || process.env.NODE_ENV !== "production";
 }
 
 export async function sendOtpEmail(
   to: string,
   code: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  if (!isSmtpConfigured()) {
+  if (!isSmtpConfigured() && !isResendConfigured()) {
     if (process.env.NODE_ENV === "production") {
-      console.error("[otp-mail] SMTP_HOST/SMTP_USER/SMTP_PASS are not set — cannot send OTP email");
+      console.error("[otp-mail] No mail sender is configured — cannot send OTP email");
       return { ok: false, error: "Email delivery is not configured. Contact HR or IT." };
     }
     console.info(`[otp-mail:stub] OTP for ${to}: ${code}`);
@@ -22,6 +26,9 @@ export async function sendOtpEmail(
   }
 
   try {
+    if (isResendConfigured()) {
+      return await sendViaResend(to, code);
+    }
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
       port: Number(process.env.SMTP_PORT ?? 587),
@@ -36,7 +43,19 @@ export async function sendOtpEmail(
       from: `"Silverleaf Academy" <${process.env.SMTP_USER ?? "jobs@silverleaf.co.tz"}>`,
       to,
       subject: `Your sign-in code: ${code}`,
-      html: `
+      html: otpHtml(code),
+    });
+
+    return { ok: true };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    console.error("[otp-mail:error]", error);
+    return { ok: false, error };
+  }
+}
+
+function otpHtml(code: string): string {
+  return `
         <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;padding:2rem">
           <h2 style="color:#002368;margin:0 0 0.5rem">Your sign-in code</h2>
           <p style="color:#444;margin:0 0 1.5rem">
@@ -60,13 +79,29 @@ export async function sendOtpEmail(
             If you didn't request this, you can safely ignore this email.
           </p>
         </div>
-      `,
-    });
+      `;
+}
 
-    return { ok: true };
-  } catch (err) {
-    const error = err instanceof Error ? err.message : String(err);
-    console.error("[otp-mail:error]", error);
-    return { ok: false, error };
+async function sendViaResend(to: string, code: string): Promise<{ ok: boolean; error?: string }> {
+  const from = process.env.OTP_FROM_EMAIL || "Silverleaf Academy <tasks@silverleaf.co.tz>";
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject: `Your sign-in code: ${code}`,
+      html: otpHtml(code),
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    console.error("[otp-mail:resend]", response.status, detail);
+    return { ok: false, error: "Email delivery failed. Contact HR or IT." };
   }
+  return { ok: true };
 }

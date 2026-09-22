@@ -222,7 +222,7 @@ export async function getMyHistory(userId: string) {
       id: item.id,
       date: plan.planDate.toISOString(),
       slot: item.slot,
-      title: item.task?.title ?? item.title,
+      title: item.title,
       priority: item.task?.priority ?? null,
       status: item.task?.status ?? item.status,
       completedAt: item.task?.completedAt?.toISOString() ?? item.completedAt?.toISOString() ?? null,

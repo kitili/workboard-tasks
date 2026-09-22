@@ -2,16 +2,8 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { PRIORITY_LABELS } from "@/lib/board/columns";
+import { BOARD_COLUMNS, PRIORITY_LABELS } from "@/lib/board/columns";
 import type { BoardTask, BoardUser } from "@/lib/board/types";
-
-const PRIORITY_BORDER: Record<string, string> = {
-  HIGHEST: "border-l-rose-500",
-  HIGH: "border-l-orange-500",
-  MEDIUM: "border-l-indigo-500",
-  LOW: "border-l-sky-400",
-  LOWEST: "border-l-zinc-300",
-};
 
 type TaskCardProps = {
   task: BoardTask;
@@ -32,14 +24,15 @@ export function TaskCard({ task, columnStatus, users, onChange }: TaskCardProps)
   };
 
   const priority = PRIORITY_LABELS[task.priority ?? ""] ?? PRIORITY_LABELS[""];
+  const phase = BOARD_COLUMNS.find((column) => column.id === columnStatus) ?? BOARD_COLUMNS[0];
 
   return (
     <article
       ref={setNodeRef}
       style={style}
-      className={`rounded-xl border border-zinc-200 border-l-4 bg-white shadow-sm ${
-        PRIORITY_BORDER[task.priority ?? ""] ?? "border-l-zinc-300"
-      } ${isDragging ? "opacity-70 ring-2 ring-sky-400" : ""}`}
+      className={`rounded-xl border border-l-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${phase.card} ${
+        isDragging ? "opacity-80 ring-2 ring-[#FFC952]" : ""
+      }`}
     >
       <div className="cursor-grab px-3 pt-3 active:cursor-grabbing" {...attributes} {...listeners}>
         <div className="flex items-start justify-between gap-2">

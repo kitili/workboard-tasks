@@ -26,7 +26,7 @@ export default async function TodayPage() {
           </p>
           <h2 className="mt-1 text-2xl font-semibold">My tasks</h2>
           <p className="mt-1 text-sm text-zinc-600">
-            Fill today’s 1–5. Those lines are added to your tasks. The percentage shows how much of each week you finished.
+            Fill today’s 1–5. Those exact lines stay in your history, numbered the way you wrote them.
           </p>
         </div>
         <Link href="/board" className="text-sm font-medium text-sky-700">
