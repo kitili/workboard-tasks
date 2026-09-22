@@ -13,6 +13,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
+import { canMoveTask, cardOwnerId } from "@/lib/board/access";
 import { BOARD_COLUMNS, PRIORITY_LABELS, columnForStatus } from "@/lib/board/columns";
 import type { BoardTask, BoardUser } from "@/lib/board/types";
 import { BoardColumn } from "@/components/board/board-column";
@@ -39,11 +40,12 @@ function groupByStatus(tasks: BoardTask[]): Record<string, BoardTask[]> {
   return grouped;
 }
 
-export function KanbanBoard({ initialTasks, users }: KanbanBoardProps) {
+export function KanbanBoard({ initialTasks, users, currentUserId }: KanbanBoardProps) {
   const [tasks, setTasks] = useState(initialTasks);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [personFilter, setPersonFilter] = useState("all");
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [notice, setNotice] = useState("");
 
   const visible = useMemo(
     () =>
@@ -58,6 +60,8 @@ export function KanbanBoard({ initialTasks, users }: KanbanBoardProps) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   function handleDragStart(event: DragStartEvent) {
+    const task = tasks.find((item) => item.id === String(event.active.id));
+    if (!task || !canMoveTask(task, currentUserId)) return;
     setActiveId(String(event.active.id));
   }
 
@@ -68,7 +72,7 @@ export function KanbanBoard({ initialTasks, users }: KanbanBoardProps) {
 
     const taskId = String(active.id);
     const task = tasks.find((item) => item.id === taskId);
-    if (!task) return;
+    if (!task || !canMoveTask(task, currentUserId)) return;
 
     const overData = over.data.current as { type?: string; status?: string } | undefined;
     let targetStatus: string = columnForStatus(task.status);
@@ -83,37 +87,52 @@ export function KanbanBoard({ initialTasks, users }: KanbanBoardProps) {
     setTasks((prev) => prev.map((item) => (item.id === taskId ? { ...item, status: targetStatus } : item)));
     setOpenGroups((prev) => ({ ...prev, [`${targetStatus}:${task.assignee?.id ?? "unassigned"}`]: true }));
 
-    await fetch(`/api/board/tasks/${taskId}`, {
+    const res = await fetch(`/api/board/tasks/${taskId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: targetStatus }),
     });
+    if (!res.ok) {
+      setTasks((prev) => prev.map((item) => (item.id === taskId ? task : item)));
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      setNotice(data?.error ?? "That card stayed where it was.");
+    }
   }
 
   async function changeTask(
     taskId: string,
-    patch: { assigneeId?: string | null; priority?: string | null },
+    patch: { priority?: string | null; shareWith?: string; handoverTo?: string },
   ) {
+    setNotice("");
+    const personId = patch.handoverTo ?? patch.shareWith;
     setTasks((prev) =>
       prev.map((task) => {
         if (task.id !== taskId) return task;
-        const assignee =
-          patch.assigneeId === undefined
-            ? task.assignee
-            : (users.find((user) => user.id === patch.assigneeId) ?? null);
+        const assignee = personId ? (users.find((user) => user.id === personId) ?? task.assignee) : task.assignee;
         return {
           ...task,
           priority: patch.priority === undefined ? task.priority : patch.priority,
           assignee,
+          sharedWithIds: patch.handoverTo
+            ? []
+            : patch.shareWith
+              ? Array.from(new Set([...task.sharedWithIds, patch.shareWith]))
+              : task.sharedWithIds,
+          moveOwnerId: patch.handoverTo ?? task.moveOwnerId ?? cardOwnerId(task),
         };
       }),
     );
 
-    await fetch(`/api/board/tasks/${taskId}`, {
+    const res = await fetch(`/api/board/tasks/${taskId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     });
+    if (!res.ok) {
+      setTasks(initialTasks);
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      setNotice(data?.error ?? "That change was not saved.");
+    }
   }
 
   return (
@@ -122,7 +141,7 @@ export function KanbanBoard({ initialTasks, users }: KanbanBoardProps) {
         <div>
           <h2 className="text-2xl font-semibold">Silverleaf Tasks</h2>
           <p className="mt-1 text-sm text-zinc-500">
-            One card per person. Open it to see their tasks, change who it’s assigned to, or drag a task across.
+            You can move your own cards. Share a card so both of you can move it, or hand it over so only the other person can.
           </p>
         </div>
         <label className="text-sm">
@@ -142,6 +161,8 @@ export function KanbanBoard({ initialTasks, users }: KanbanBoardProps) {
         </label>
       </div>
 
+      {notice ? <p className="mb-4 text-sm text-[#002368]">{notice}</p> : null}
+
       <DndContext
         sensors={sensors}
         collisionDetection={collisionDetection}
@@ -158,6 +179,7 @@ export function KanbanBoard({ initialTasks, users }: KanbanBoardProps) {
               forceOpen={personFilter !== "all"}
               openGroups={openGroups}
               onToggleGroup={(key) => setOpenGroups((prev) => ({ ...prev, [key]: !prev[key] }))}
+              currentUserId={currentUserId}
               onChangeTask={(id, patch) => void changeTask(id, patch)}
             />
           ))}

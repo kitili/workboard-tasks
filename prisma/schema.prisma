@@ -92,6 +92,7 @@ model User {
   dailyPlans   DailyPlan[]
   tasks        Task[]       @relation("TaskAssignee")
   authoredTasks Task[]    @relation("TaskAuthor")
+  ownedMoves   Task[]     @relation("TaskMoveOwner")
   activities   TaskActivity[]
   messages     ChatMessage[]
   comments     TaskComment[]
@@ -173,6 +174,8 @@ model Task {
   projectId      String?
   assigneeId     String?
   authorId       String?
+  moveOwnerId    String?
+  sharedWithIds  String[]     @default([])
   taskKey        String?      @unique
   title          String
   description    String?
@@ -193,6 +196,7 @@ model Task {
   project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
   assignee     User?         @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   author       User?         @relation("TaskAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  moveOwner    User?         @relation("TaskMoveOwner", fields: [moveOwnerId], references: [id], onDelete: SetNull)
   dailyItem    DailyPlanItem?
   activities   TaskActivity[]
   comments     TaskComment[]

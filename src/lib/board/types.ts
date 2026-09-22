@@ -11,6 +11,9 @@ export type BoardTask = {
   columnOrder: number;
   dueDate: string | null;
   blockerNote: string | null;
+  authorId: string | null;
+  moveOwnerId: string | null;
+  sharedWithIds: string[];
   assignee: { id: string; name: string | null; username?: string | null; phone: string } | null;
   dailyItem: { slot: number } | null;
   _count: { comments: number };

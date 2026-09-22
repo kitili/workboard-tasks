@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { canMoveTask, cardOwnerId } from "@/lib/board/access";
+import { getSessionUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { getTaskDetail } from "@/lib/data/board";
 import { syncDailyItemStatus } from "@/lib/services/daily-sheet";
@@ -12,7 +14,8 @@ const updateSchema = z.object({
     .optional(),
   type: z.enum(["TASK", "STORY", "BUG"]).optional(),
   priority: z.enum(["LOWEST", "LOW", "MEDIUM", "HIGH", "HIGHEST"]).nullable().optional(),
-  assigneeId: z.string().nullable().optional(),
+  shareWith: z.string().optional(),
+  handoverTo: z.string().optional(),
   labels: z.array(z.string()).optional(),
   storyPoints: z.number().int().min(0).max(100).nullable().optional(),
   dueDate: z.string().datetime().nullable().optional(),
@@ -38,10 +41,28 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const { id } = await context.params;
     const body = updateSchema.parse(await request.json());
 
+    const session = await getSessionUser();
+    if (!session) return NextResponse.json({ error: "Log in first" }, { status: 401 });
+
     const existing = await db.task.findUnique({ where: { id } });
     if (!existing) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
+
+    const ownerId = cardOwnerId(existing);
+    const moving = body.status && body.status !== existing.status;
+    if (moving && !canMoveTask(existing, session.id)) {
+      return NextResponse.json({ error: "You can only move a card you own, or one shared with you." }, { status: 403 });
+    }
+    if ((body.shareWith || body.handoverTo) && session.id !== ownerId) {
+      return NextResponse.json({ error: "Only the card owner can share or hand it over." }, { status: 403 });
+    }
+
+    const sharedWithIds = body.handoverTo
+      ? []
+      : body.shareWith
+        ? Array.from(new Set([...existing.sharedWithIds, body.shareWith]))
+        : undefined;
 
     const task = await db.task.update({
       where: { id },
@@ -51,7 +72,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         status: body.status,
         type: body.type,
         priority: body.priority,
-        assigneeId: body.assigneeId,
+        assigneeId: body.handoverTo ?? body.shareWith,
+        moveOwnerId: body.handoverTo ?? undefined,
+        sharedWithIds,
         labels: body.labels,
         storyPoints: body.storyPoints,
         dueDate: body.dueDate === null ? null : body.dueDate ? new Date(body.dueDate) : undefined,
