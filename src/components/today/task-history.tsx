@@ -1,9 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { phaseStyle } from "@/lib/board/columns";
 import { dailyLineLabel } from "@/lib/daily-lines";
+import { Pager } from "@/components/pager";
+
+const HISTORY_PAGE_SIZE = 7;
 
 type Entry = {
   id: string;
@@ -26,6 +29,7 @@ export function TaskHistory({ entries, diligence }: { entries: Entry[]; diligenc
   const [from, setFrom] = useState("2026-09-01");
   const [to, setTo] = useState("");
   const [status, setStatus] = useState("all");
+  const [page, setPage] = useState(1);
 
   const visible = useMemo(() => {
     const start = new Date(from || "2026-09-01");
@@ -53,6 +57,14 @@ export function TaskHistory({ entries, diligence }: { entries: Entry[]; diligenc
       items: [...items].sort((a, b) => a.slot - b.slot),
     }));
   }, [visible]);
+
+  const pages = Math.max(1, Math.ceil(days.length / HISTORY_PAGE_SIZE));
+  const safePage = Math.min(page, pages);
+  const pageDays = days.slice((safePage - 1) * HISTORY_PAGE_SIZE, safePage * HISTORY_PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [from, to, status]);
 
   const visibleWeeks = diligence.filter((item) => new Date(item.weekStart) >= new Date(from || "2026-09-01"));
   const exportHref = `/api/me/export?status=${status}&from=${from || "2026-09-01"}&to=${to}`;
@@ -125,7 +137,7 @@ export function TaskHistory({ entries, diligence }: { entries: Entry[]; diligenc
         </p>
       ) : (
         <div className="space-y-4">
-          {days.map((day) => (
+          {pageDays.map((day) => (
             <article key={day.key} className="overflow-hidden rounded-2xl border border-[#002368]/10 bg-white shadow-sm">
               <header className="border-b border-[#002368]/10 bg-[#f4f7fb] px-5 py-3">
                 <h4 className="text-sm font-semibold text-[#002368]">
@@ -146,11 +158,15 @@ export function TaskHistory({ entries, diligence }: { entries: Entry[]; diligenc
                         </span>
                         {entry.title}
                       </p>
-                      <span className="hidden text-xs text-[#818283] sm:inline">
-                        {entry.priority?.toLowerCase() ?? "no priority"}
-                      </span>
-                      <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${phase.pill}`}>
-                        {phase.title}
+                      {entry.priority ? (
+                        <span className="hidden text-xs capitalize text-[#818283] sm:inline">{entry.priority.toLowerCase()}</span>
+                      ) : null}
+                      <span
+                        className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                          entry.slot === 5 ? "bg-[#80BFEC] text-[#002368]" : phase.pill
+                        }`}
+                      >
+                        {entry.slot === 5 ? "Update" : phase.title}
                       </span>
                     </li>
                   );
@@ -158,6 +174,7 @@ export function TaskHistory({ entries, diligence }: { entries: Entry[]; diligenc
               </ol>
             </article>
           ))}
+          <Pager page={safePage} pages={pages} onPage={setPage} />
         </div>
       )}
     </section>
