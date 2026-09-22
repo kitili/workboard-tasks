@@ -9,7 +9,7 @@ export const DAILY_LINES = [
   },
   {
     slot: 5,
-    label: "Reprise",
+    label: "Progress recap",
     hint: "A recap of how yesterday’s priorities went",
   },
 ] as const;

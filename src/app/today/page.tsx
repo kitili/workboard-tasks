@@ -26,7 +26,7 @@ export default async function TodayPage() {
           </p>
           <h2 className="mt-1 font-[family-name:var(--font-display)] text-3xl text-[#002368]">My tasks</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[#4f555f]">
-            Three priorities, one challenge, and a reprise of yesterday. Once you add them, this page clears for tomorrow.
+            Three priorities, one challenge, and a progress recap of yesterday. Once you add them, this page clears for tomorrow.
           </p>
         </div>
         <Link

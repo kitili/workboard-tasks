@@ -54,7 +54,7 @@ export function TodayForm({ filed }: { filed: boolean }) {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#002368]">Filed</p>
           <h3 className="mt-2 font-[family-name:var(--font-display)] text-2xl text-[#002368]">Today is done</h3>
           <p className="mt-2 max-w-xl text-sm leading-6 text-[#4f555f]">
-            Your priorities, challenge, and reprise are saved. This list is clear and waiting for tomorrow.
+            Your priorities, challenge, and progress recap are saved. This list is clear and waiting for tomorrow.
           </p>
         </div>
       </section>
@@ -101,7 +101,7 @@ export function TodayForm({ filed }: { filed: boolean }) {
         <section className="space-y-3 rounded-xl bg-[#D9ECF9] p-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#002368]">05</p>
-            <h3 className="mt-1 font-[family-name:var(--font-display)] text-xl text-[#002368]">Reprise</h3>
+            <h3 className="mt-1 font-[family-name:var(--font-display)] text-xl text-[#002368]">Progress recap</h3>
             <p className="mt-1 text-sm text-[#4f555f]">A recap of the previous day’s progress.</p>
           </div>
           <LineField
