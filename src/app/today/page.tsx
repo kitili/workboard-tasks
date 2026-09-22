@@ -26,14 +26,20 @@ export default async function TodayPage() {
           </p>
           <h2 className="mt-1 text-2xl font-semibold">My tasks</h2>
           <p className="mt-1 text-sm text-zinc-600">
-            Fill today’s 1–5. Those exact lines stay in your history, numbered the way you wrote them.
+            Three priorities, one challenge, and an update on yesterday. Add to my tasks keeps that list.
           </p>
         </div>
         <Link href="/board" className="text-sm font-medium text-[#002368]">
           Open the board
         </Link>
       </div>
-      <TodayForm existing={(me?.slots ?? []).map((slot) => ({ title: slot.title, priority: slot.priority }))} />
+      <TodayForm
+        existing={(me?.slots ?? []).map((slot) => ({
+          slot: slot.slot,
+          title: slot.title,
+          priority: slot.priority,
+        }))}
+      />
       <TaskHistory entries={history.entries} diligence={history.diligence} />
     </div>
   );

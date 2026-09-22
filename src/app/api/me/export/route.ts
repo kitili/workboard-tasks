@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { format } from "date-fns";
 import { getSessionUser } from "@/lib/auth/session";
+import { dailyLineLabel } from "@/lib/daily-lines";
 import { getMyHistory } from "@/lib/services/daily-sheet";
 
 function csvCell(value: string) {
@@ -28,11 +29,11 @@ export async function GET(request: NextRequest) {
   });
 
   const lines = [
-    ["Date", "Slot", "Task", "Priority", "Status", "Completed at"].join(","),
+    ["Date", "Line", "Task", "Priority", "Status", "Completed at"].join(","),
     ...rows.map((row) =>
       [
         format(new Date(row.date), "yyyy-MM-dd"),
-        String(row.slot),
+        dailyLineLabel(row.slot),
         row.title,
         row.priority ?? "",
         row.status,

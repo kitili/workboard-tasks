@@ -2,25 +2,27 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { DAILY_LINES } from "@/lib/daily-lines";
 
-type Row = { title: string; priority: string | null; locked: boolean };
-
-const EMPTY = (): Row => ({ title: "", priority: null, locked: false });
+type Row = { slot: number; title: string; priority: string | null; locked: boolean };
 
 export function TodayForm({
   existing,
 }: {
-  existing: Array<{ title: string; priority: string | null }>;
+  existing: Array<{ slot: number; title: string; priority: string | null }>;
 }) {
   const router = useRouter();
   const [rows, setRows] = useState<Row[]>(() => {
-    const filled = existing.slice(0, 5).map((item) => ({
-      title: item.title,
-      priority: item.priority,
-      locked: true,
-    }));
-    while (filled.length < 5) filled.push(EMPTY());
-    return filled;
+    const bySlot = new Map(existing.map((item) => [item.slot, item]));
+    return DAILY_LINES.map((line) => {
+      const saved = bySlot.get(line.slot);
+      return {
+        slot: line.slot,
+        title: saved?.title ?? "",
+        priority: saved?.priority ?? null,
+        locked: Boolean(saved),
+      };
+    });
   });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -38,7 +40,11 @@ export function TodayForm({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        slots: slots.map((row) => ({ title: row.title, priority: row.priority })),
+        slots: slots.map((row) => ({
+          slot: row.slot,
+          title: row.title,
+          priority: row.slot <= 3 ? row.priority : null,
+        })),
       }),
     });
     const data = (await res.json()) as { error?: string };
@@ -50,58 +56,114 @@ export function TodayForm({
     router.refresh();
   }
 
+  const priorities = DAILY_LINES.filter((line) => line.slot <= 3);
+  const challenge = DAILY_LINES[3];
+  const yesterday = DAILY_LINES[4];
+
   return (
-    <div className="space-y-4">
-      <form onSubmit={saveList} className="rounded-2xl border border-[#002368]/10 bg-white p-6">
-        <h3 className="text-lg font-semibold">Daily 1–5</h3>
-        <p className="mt-1 text-sm text-[#4f555f]">Fill the lines you have. Blank lines are skipped.</p>
-        <div className="mt-4 space-y-3">
-          {rows.map((row, index) => (
-            <div key={index} className="grid grid-cols-[36px_1fr_150px] items-center gap-3">
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#002368] text-sm font-semibold text-white">
-                {index + 1}
-              </span>
-              <input
-                value={row.title}
-                disabled={row.locked}
-                onChange={(e) =>
-                  setRows((current) =>
-                    current.map((item, i) => (i === index ? { ...item, title: e.target.value } : item)),
-                  )
-                }
-                placeholder={`Task ${index + 1}`}
-                className="rounded-xl border border-zinc-200 px-3 py-2.5 text-sm disabled:bg-[#f4f7fb]"
-              />
-              <select
-                value={row.priority ?? ""}
-                disabled={row.locked}
-                onChange={(e) =>
-                  setRows((current) =>
-                    current.map((item, i) =>
-                      i === index ? { ...item, priority: e.target.value || null } : item,
-                    ),
-                  )
-                }
-                className="rounded-xl border border-zinc-200 px-3 py-2.5 text-sm disabled:bg-[#f4f7fb]"
-              >
-                <option value="">No priority</option>
-                <option value="LOW">Low</option>
-                <option value="MEDIUM">Medium</option>
-                <option value="HIGH">High</option>
-                <option value="HIGHEST">Highest</option>
-              </select>
-            </div>
-          ))}
-        </div>
-        <button
-          type="submit"
-          disabled={saving}
-          className="mt-5 rounded-xl bg-[#002368] px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+    <form onSubmit={saveList} className="space-y-5 rounded-2xl border border-[#002368]/10 bg-white p-6">
+      <div>
+        <h3 className="text-lg font-semibold">Today’s three priorities</h3>
+        <p className="mt-1 text-sm text-[#4f555f]">Write the ones you have. Blank lines stay empty.</p>
+      </div>
+
+      <div className="space-y-3">
+        {priorities.map((line) => (
+          <LineField
+            key={line.slot}
+            line={line}
+            row={rows[line.slot - 1]}
+            showPriority
+            onChange={(patch) =>
+              setRows((current) => current.map((item) => (item.slot === line.slot ? { ...item, ...patch } : item)))
+            }
+          />
+        ))}
+      </div>
+
+      <div className="space-y-3 border-t border-[#002368]/10 pt-5">
+        <h3 className="text-lg font-semibold">Challenge</h3>
+        <p className="text-sm text-[#4f555f]">Setbacks that got in the way of those priorities.</p>
+        <LineField
+          line={challenge}
+          row={rows[3]}
+          onChange={(patch) =>
+            setRows((current) => current.map((item) => (item.slot === 4 ? { ...item, ...patch } : item)))
+          }
+        />
+      </div>
+
+      <div className="space-y-3 border-t border-[#002368]/10 pt-5">
+        <h3 className="text-lg font-semibold">Yesterday</h3>
+        <p className="text-sm text-[#4f555f]">Progress or updates on yesterday’s priorities.</p>
+        <LineField
+          line={yesterday}
+          row={rows[4]}
+          onChange={(patch) =>
+            setRows((current) => current.map((item) => (item.slot === 5 ? { ...item, ...patch } : item)))
+          }
+        />
+      </div>
+
+      <button
+        type="submit"
+        disabled={saving}
+        className="rounded-xl bg-[#002368] px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+      >
+        {saving ? "Adding…" : "Add to my tasks"}
+      </button>
+      {error ? <p className="text-sm text-[#002368]">{error}</p> : null}
+    </form>
+  );
+}
+
+function LineField({
+  line,
+  row,
+  showPriority,
+  onChange,
+}: {
+  line: (typeof DAILY_LINES)[number];
+  row: Row;
+  showPriority?: boolean;
+  onChange: (patch: Partial<Pick<Row, "title" | "priority">>) => void;
+}) {
+  return (
+    <div className="grid grid-cols-[36px_1fr] items-center gap-3 sm:grid-cols-[36px_1fr_150px]">
+      <span
+        className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold ${
+          line.slot === 4
+            ? "bg-[#FFC952] text-[#14233B]"
+            : line.slot === 5
+              ? "bg-[#80BFEC] text-[#002368]"
+              : "bg-[#002368] text-white"
+        }`}
+      >
+        {line.slot}
+      </span>
+      <input
+        value={row.title}
+        disabled={row.locked}
+        onChange={(e) => onChange({ title: e.target.value })}
+        placeholder={line.hint}
+        className="rounded-xl border border-[#002368]/15 px-3 py-2.5 text-sm disabled:bg-[#f4f7fb]"
+      />
+      {showPriority ? (
+        <select
+          value={row.priority ?? ""}
+          disabled={row.locked}
+          onChange={(e) => onChange({ priority: e.target.value || null })}
+          className="col-start-2 rounded-xl border border-[#002368]/15 px-3 py-2.5 text-sm disabled:bg-[#f4f7fb] sm:col-start-auto"
         >
-          {saving ? "Adding…" : "Add to my tasks"}
-        </button>
-        {error ? <p className="mt-3 text-sm text-rose-600">{error}</p> : null}
-      </form>
+          <option value="">No priority</option>
+          <option value="LOW">Low</option>
+          <option value="MEDIUM">Medium</option>
+          <option value="HIGH">High</option>
+          <option value="HIGHEST">Highest</option>
+        </select>
+      ) : (
+        <span className="hidden sm:block" />
+      )}
     </div>
   );
 }

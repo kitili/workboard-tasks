@@ -11,6 +11,7 @@ const listSchema = z.object({
       z.object({
         title: z.string(),
         priority: prioritySchema,
+        slot: z.number().int().min(1).max(5).optional(),
       }),
     )
     .min(1)
@@ -44,7 +45,11 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Fill in at least one task" }, { status: 400 });
       }
       for (const slot of filled) {
-        await addTodayTask(user.id, { title: slot.title, priority: slot.priority ?? null });
+        await addTodayTask(user.id, {
+          title: slot.title,
+          priority: slot.priority ?? null,
+          slot: slot.slot,
+        });
       }
     } else {
       const extra = extraSchema.parse(body);

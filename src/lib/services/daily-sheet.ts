@@ -150,7 +150,7 @@ export async function getTodaySheet(organizationId?: string) {
 
 export async function addTodayTask(
   userId: string,
-  input: { title: string; priority: TaskPriority | null; status?: TaskStatus },
+  input: { title: string; priority: TaskPriority | null; status?: TaskStatus; slot?: number },
 ) {
   const title = input.title.trim();
   if (!title) throw new Error("Write the task first");
@@ -166,11 +166,20 @@ export async function addTodayTask(
     update: {},
   });
 
-  const last = await db.dailyPlanItem.aggregate({
-    where: { dailyPlanId: plan.id },
-    _max: { slot: true },
-  });
-  const slot = (last._max.slot ?? 0) + 1;
+  let slot = input.slot;
+  if (slot != null) {
+    if (slot < 1 || slot > 5) throw new Error("That line is not on today's list");
+    const taken = await db.dailyPlanItem.findFirst({
+      where: { dailyPlanId: plan.id, slot },
+    });
+    if (taken) throw new Error("That line is already on your list");
+  } else {
+    const last = await db.dailyPlanItem.aggregate({
+      where: { dailyPlanId: plan.id },
+      _max: { slot: true },
+    });
+    slot = (last._max.slot ?? 0) + 1;
+  }
   const status = input.status ?? "TODO";
   const taskKey = await allocateTaskKey(project.id);
 

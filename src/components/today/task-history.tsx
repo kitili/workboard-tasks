@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { format } from "date-fns";
 import { phaseStyle } from "@/lib/board/columns";
+import { dailyLineLabel } from "@/lib/daily-lines";
 
 type Entry = {
   id: string;
@@ -139,7 +140,12 @@ export function TaskHistory({ entries, diligence }: { entries: Entry[]; diligenc
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#002368] text-sm font-semibold text-white">
                         {entry.slot}
                       </span>
-                      <p className="min-w-0 flex-1 text-sm text-[#14233B]">{entry.title}</p>
+                      <p className="min-w-0 flex-1 text-sm text-[#14233B]">
+                        <span className="mr-2 text-xs font-semibold uppercase tracking-wide text-[#818283]">
+                          {dailyLineLabel(entry.slot)}
+                        </span>
+                        {entry.title}
+                      </p>
                       <span className="hidden text-xs text-[#818283] sm:inline">
                         {entry.priority?.toLowerCase() ?? "no priority"}
                       </span>

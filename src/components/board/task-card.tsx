@@ -3,6 +3,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { BOARD_COLUMNS, PRIORITY_LABELS } from "@/lib/board/columns";
+import { dailyLineLabel } from "@/lib/daily-lines";
 import type { BoardTask, BoardUser } from "@/lib/board/types";
 
 type TaskCardProps = {
@@ -42,7 +43,7 @@ export function TaskCard({ task, columnStatus, users, onChange }: TaskCardProps)
           </span>
         </div>
         <p className="mt-1 text-[11px] text-zinc-400">
-          {task.dailyItem ? `Task ${task.dailyItem.slot}` : task.taskKey ?? "Task"} · drag to move
+          {task.dailyItem ? dailyLineLabel(task.dailyItem.slot) : task.taskKey ?? "Task"} · drag to move
         </p>
       </div>
 
