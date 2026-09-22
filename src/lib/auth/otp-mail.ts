@@ -83,7 +83,8 @@ function otpHtml(code: string): string {
 }
 
 async function sendViaResend(to: string, code: string): Promise<{ ok: boolean; error?: string }> {
-  const from = process.env.OTP_FROM_EMAIL || "Silverleaf Academy <tasks@silverleaf.co.tz>";
+  const domain = (process.env.RESEND_EMAIL_DOMAIN || "silverleaf.co.tz").replace(/^@/, "");
+  const from = process.env.OTP_FROM_EMAIL || `Silverleaf Academy <tasks@${domain}>`;
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
