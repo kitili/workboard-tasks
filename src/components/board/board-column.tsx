@@ -50,7 +50,7 @@ export function BoardColumn({
     <section
       ref={setNodeRef}
       className={`flex w-80 shrink-0 flex-col rounded-2xl border ${column.color} ${
-        isOver ? "ring-2 ring-sky-400" : ""
+        isOver ? "ring-2 ring-[#FFC952]" : ""
       }`}
     >
       <header className="flex items-center justify-between px-3 py-3">

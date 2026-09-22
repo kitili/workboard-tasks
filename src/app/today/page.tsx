@@ -21,7 +21,7 @@ export default async function TodayPage() {
     <div className="mx-auto max-w-5xl space-y-8">
       <div className="flex items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-sky-700">
+          <p className="text-xs font-semibold uppercase tracking-widest text-[#002368]">
             {user.name ?? user.username}
           </p>
           <h2 className="mt-1 text-2xl font-semibold">My tasks</h2>
@@ -29,7 +29,7 @@ export default async function TodayPage() {
             Fill today’s 1–5. Those exact lines stay in your history, numbered the way you wrote them.
           </p>
         </div>
-        <Link href="/board" className="text-sm font-medium text-sky-700">
+        <Link href="/board" className="text-sm font-medium text-[#002368]">
           Open the board
         </Link>
       </div>

@@ -13,30 +13,30 @@ export const BOARD_COLUMNS: BoardColumn[] = [
   {
     id: "TODO",
     title: "Tasks",
-    color: "border-[#80BFEC] bg-[#e8f4fc]",
-    card: "border-[#b7daf3] border-l-[#002368] bg-[#f5fbff]",
-    pill: "bg-[#002368] text-white",
+    color: "border-[#80BFEC] bg-[#D9ECF9]",
+    card: "border-[#80BFEC] border-l-[#80BFEC] bg-white",
+    pill: "bg-[#80BFEC] text-[#002368]",
   },
   {
     id: "IN_PROGRESS",
     title: "In progress",
-    color: "border-[#FFC952] bg-[#fff6df]",
-    card: "border-[#ffe3a3] border-l-[#d9a227] bg-[#fffbf0]",
+    color: "border-[#FFC952] bg-[#FFF7E5]",
+    card: "border-[#FFC952] border-l-[#FFC952] bg-white",
     pill: "bg-[#FFC952] text-[#14233B]",
   },
   {
     id: "BACKLOG",
     title: "Backlog",
-    color: "border-[#c8c9cb] bg-[#f3f4f5]",
-    card: "border-[#d9dadc] border-l-[#818283] bg-[#fafafa]",
-    pill: "bg-[#818283] text-white",
+    color: "border-[#818283] bg-[#ECECEC]",
+    card: "border-[#818283] border-l-[#818283] bg-white",
+    pill: "bg-[#ECECEC] text-[#14233B]",
   },
   {
     id: "COMPLETED",
     title: "Done",
-    color: "border-[#8ed4ad] bg-[#e9f8ef]",
-    card: "border-[#b7e6c8] border-l-[#1f8f4e] bg-[#f4fbf7]",
-    pill: "bg-[#1f8f4e] text-white",
+    color: "border-[#002368] bg-[#002368]/[0.06]",
+    card: "border-[#002368] border-l-[#002368] bg-white",
+    pill: "bg-[#002368] text-white",
   },
 ];
 
@@ -56,12 +56,12 @@ export function columnForStatus(status: string): TaskStatus {
 }
 
 export const PRIORITY_LABELS: Record<string, { label: string; className: string }> = {
-  "": { label: "No priority", className: "bg-zinc-100 text-zinc-500" },
-  LOWEST: { label: "Lowest", className: "bg-zinc-100 text-zinc-600" },
-  LOW: { label: "Low", className: "bg-sky-100 text-sky-700" },
-  MEDIUM: { label: "Medium", className: "bg-indigo-100 text-indigo-700" },
-  HIGH: { label: "High", className: "bg-orange-100 text-orange-700" },
-  HIGHEST: { label: "Highest", className: "bg-rose-100 text-rose-700" },
+  "": { label: "No priority", className: "bg-[#ECECEC] text-[#4F555F]" },
+  LOWEST: { label: "Lowest", className: "bg-[#ECECEC] text-[#4F555F]" },
+  LOW: { label: "Low", className: "bg-[#D9ECF9] text-[#002368]" },
+  MEDIUM: { label: "Medium", className: "bg-[#8091B3] text-white" },
+  HIGH: { label: "High", className: "bg-[#FFC952] text-[#14233B]" },
+  HIGHEST: { label: "Highest", className: "bg-[#002368] text-white" },
 };
 
 export const TYPE_ICONS: Record<string, string> = {
