@@ -54,13 +54,27 @@ h1, h2, h3, h4 {
   letter-spacing: -0.01em;
 }
 
-a {
-  color: var(--electric-blue);
-  text-decoration: none;
+@layer base {
+  a {
+    color: var(--electric-blue);
+    text-decoration: none;
+  }
+
+  a:hover {
+    text-decoration: underline;
+  }
 }
 
-a:hover {
-  text-decoration: underline;
+a.on-navy,
+a.on-navy:hover,
+a.on-navy:visited,
+button.on-navy,
+button.on-navy:hover,
+span.on-navy {
+  background-color: #002368;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  text-decoration: none;
 }
 
 input, textarea, select {
@@ -103,8 +117,23 @@ input::placeholder, textarea::placeholder {
 }
 
 .site-nav__links > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   font-weight: 600;
   font-size: 0.95rem;
+}
+
+.site-nav__badge {
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: #ffc952;
+  color: #14233b;
+  font-size: 0.65rem;
+  line-height: 1.15rem;
+  text-align: center;
 }
 
 .site-nav__links > a:hover {

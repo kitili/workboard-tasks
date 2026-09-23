@@ -50,7 +50,9 @@ export function TaskCard({ task, columnStatus, users, currentUserId, onChange }:
         {...(allowed ? { ...attributes, ...listeners } : {})}
       >
         <div className="flex items-start justify-between gap-2">
-          <p className="text-sm font-semibold leading-5 text-zinc-900">{task.title}</p>
+          <p className="text-sm font-semibold leading-5" style={{ color: "#14233B" }}>
+            {task.title}
+          </p>
           <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${priority.className}`}>
             {priority.label}
           </span>

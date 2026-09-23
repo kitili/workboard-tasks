@@ -5,6 +5,7 @@ import "@fontsource/bai-jamjuree/400.css";
 import "@fontsource/bai-jamjuree/600.css";
 import { Nav } from "@/components/nav";
 import { getSessionUser } from "@/lib/auth/session";
+import { countUnreadUpdates } from "@/lib/services/updates";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -15,6 +16,7 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const user = await getSessionUser();
+  const unreadUpdates = user ? await countUnreadUpdates(user.organizationId, user.id) : 0;
 
   return (
     <html lang="en" className="h-full antialiased">
@@ -26,6 +28,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
               username: user.username,
               avatarUrl: user.avatarUrl,
             }}
+            unreadUpdates={unreadUpdates}
           />
         ) : null}
         <main className="app-main">{children}</main>

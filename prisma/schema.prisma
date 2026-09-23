@@ -69,6 +69,7 @@ model Organization {
   users    User[]
   projects Project[]
   tasks    Task[]
+  progressUpdates ProgressUpdate[]
 
   @@index([slug])
 }
@@ -96,9 +97,32 @@ model User {
   activities   TaskActivity[]
   messages     ChatMessage[]
   comments     TaskComment[]
+  progressUpdates ProgressUpdate[]
 
   @@index([organizationId])
   @@index([phone])
+}
+
+enum DailyNoteKind {
+  PROGRESS
+  CHALLENGE
+}
+
+model ProgressUpdate {
+  id             String        @id @default(cuid())
+  organizationId String
+  authorId       String
+  body           String
+  planDate       DateTime      @db.Date
+  kind           DailyNoteKind @default(PROGRESS)
+  readByIds      String[]      @default([])
+  createdAt      DateTime      @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  author       User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, kind, createdAt])
+  @@index([authorId, createdAt])
 }
 
 model EmailOtp {

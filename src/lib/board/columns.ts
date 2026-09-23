@@ -36,7 +36,7 @@ export const BOARD_COLUMNS: BoardColumn[] = [
     title: "Done",
     color: "border-[#002368] bg-[#002368]/[0.06]",
     card: "border-[#002368] border-l-[#002368] bg-white",
-    pill: "bg-[#002368] text-white",
+    pill: "on-navy",
   },
 ];
 
@@ -61,7 +61,7 @@ export const PRIORITY_LABELS: Record<string, { label: string; className: string 
   LOW: { label: "Low", className: "bg-[#D9ECF9] text-[#002368]" },
   MEDIUM: { label: "Medium", className: "bg-[#8091B3] text-white" },
   HIGH: { label: "High", className: "bg-[#FFC952] text-[#14233B]" },
-  HIGHEST: { label: "Highest", className: "bg-[#002368] text-white" },
+  HIGHEST: { label: "Highest", className: "on-navy" },
 };
 
 export const TYPE_ICONS: Record<string, string> = {

@@ -101,6 +101,30 @@ export async function submitDailyFive(userId: string, slots: DailySlotInput[]) {
   return getTodaySheet(user.organizationId);
 }
 
+/** Yesterday’s cards still sitting in Tasks move to Backlog. In progress stays put. */
+export async function parkUnfinishedDailyTasks(organizationId: string) {
+  const today = startOfDay(new Date());
+  const stale = await db.task.findMany({
+    where: {
+      organizationId,
+      status: "TODO",
+      dailyItem: { is: { dailyPlan: { planDate: { lt: today } } } },
+    },
+    select: { id: true },
+  });
+  if (stale.length === 0) return;
+
+  const ids = stale.map((task) => task.id);
+  await db.task.updateMany({
+    where: { id: { in: ids } },
+    data: { status: "BACKLOG" },
+  });
+  await db.dailyPlanItem.updateMany({
+    where: { taskId: { in: ids } },
+    data: { status: "BACKLOG" },
+  });
+}
+
 export async function getTodaySheet(organizationId?: string) {
   const env = getEnv();
   const org =
@@ -111,6 +135,7 @@ export async function getTodaySheet(organizationId?: string) {
 
   if (!org) return { people: [], date: startOfDay(new Date()).toISOString() };
 
+  await parkUnfinishedDailyTasks(org.id);
   const planDate = startOfDay(new Date());
   const people = await db.user.findMany({
     where: { organizationId: org.id, isActive: true },
@@ -181,6 +206,28 @@ export async function addTodayTask(
     });
     slot = (last._max.slot ?? 0) + 1;
   }
+
+  if (slot === 4 || slot === 5) {
+    await db.progressUpdate.create({
+      data: {
+        organizationId: user.organizationId,
+        authorId: userId,
+        body: title,
+        planDate,
+        kind: slot === 4 ? "CHALLENGE" : "PROGRESS",
+      },
+    });
+    await db.dailyPlanItem.create({
+      data: {
+        dailyPlanId: plan.id,
+        slot,
+        title,
+        status: "BACKLOG",
+      },
+    });
+    return null;
+  }
+
   const status = input.status ?? "TODO";
   const taskKey = await allocateTaskKey(project.id);
 
@@ -245,6 +292,7 @@ export async function getMyHistory(userId: string) {
     const weekStart = startOfWeek(new Date(entry.date), { weekStartsOn: 1 });
     const key = format(weekStart, "yyyy-MM-dd");
     const bucket = weeks.get(key) ?? { weekStart: weekStart.toISOString(), created: 0, done: 0 };
+    if (entry.slot === 4 || entry.slot === 5) continue;
     bucket.created += 1;
     if (entry.status === "COMPLETED") bucket.done += 1;
     weeks.set(key, bucket);

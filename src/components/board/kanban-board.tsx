@@ -22,6 +22,7 @@ type KanbanBoardProps = {
   initialTasks: BoardTask[];
   users: BoardUser[];
   currentUserId: string | null;
+  mine?: boolean;
 };
 
 const collisionDetection: CollisionDetection = (args) => {
@@ -40,10 +41,10 @@ function groupByStatus(tasks: BoardTask[]): Record<string, BoardTask[]> {
   return grouped;
 }
 
-export function KanbanBoard({ initialTasks, users, currentUserId }: KanbanBoardProps) {
+export function KanbanBoard({ initialTasks, users, currentUserId, mine = false }: KanbanBoardProps) {
   const [tasks, setTasks] = useState(initialTasks);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [personFilter, setPersonFilter] = useState("all");
+  const [personFilter, setPersonFilter] = useState(mine && currentUserId ? currentUserId : "all");
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [notice, setNotice] = useState("");
 
@@ -139,9 +140,13 @@ export function KanbanBoard({ initialTasks, users, currentUserId }: KanbanBoardP
     <>
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-semibold">Silverleaf Tasks</h2>
+          <h2 className="text-2xl font-semibold">
+            {personFilter !== "all" && personFilter === currentUserId ? "My board" : "Silverleaf Tasks"}
+          </h2>
           <p className="mt-1 text-sm text-zinc-500">
-            You can move your own cards. Share a card so both of you can move it, or hand it over so only the other person can.
+            {personFilter !== "all" && personFilter === currentUserId
+              ? "Only your cards. Drag one from Tasks into In progress, Backlog, or Done."
+              : "Every person’s cards are on the board. Use Show to look at one name. You can move your own cards. Share a card so both of you can move it, or hand it over so only the other person can."}
           </p>
         </div>
         <label className="text-sm">
@@ -176,7 +181,7 @@ export function KanbanBoard({ initialTasks, users, currentUserId }: KanbanBoardP
               column={column}
               tasks={columns[column.id] ?? []}
               users={users}
-              forceOpen={personFilter !== "all"}
+              forceOpen={false}
               openGroups={openGroups}
               onToggleGroup={(key) => setOpenGroups((prev) => ({ ...prev, [key]: !prev[key] }))}
               currentUserId={currentUserId}

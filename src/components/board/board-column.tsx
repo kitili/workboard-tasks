@@ -56,7 +56,9 @@ export function BoardColumn({
       }`}
     >
       <header className="flex items-center justify-between px-3 py-3">
-        <h3 className="text-sm font-semibold text-[#14233B]">{column.title}</h3>
+        <h3 className="text-sm font-semibold" style={{ color: "#14233B" }}>
+          {column.title}
+        </h3>
         <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${column.pill}`}>
           {tasks.length}
         </span>
@@ -69,14 +71,16 @@ export function BoardColumn({
           const ids = groupTasks.map((task) => task.id);
 
           return (
-            <div key={storageKey} className="rounded-xl bg-white/80 p-2">
+            <div key={storageKey} className="rounded-lg bg-white/80 px-2 py-1">
               <button
                 type="button"
                 onClick={() => onToggleGroup(storageKey)}
-                className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left hover:bg-white"
+                className="flex w-full items-center justify-between gap-2 rounded-md px-1 py-1 text-left hover:bg-white"
               >
-                <span className="text-sm font-semibold text-zinc-900">{personName(groupTasks[0])}</span>
-                <span className="text-xs text-zinc-500">
+                <span className="min-w-0 truncate text-sm font-semibold" style={{ color: "#14233B" }}>
+                  {personName(groupTasks[0])}
+                </span>
+                <span className="shrink-0 text-xs" style={{ color: "#4f555f" }}>
                   {groupTasks.length} {open ? "▾" : "▸"}
                 </span>
               </button>

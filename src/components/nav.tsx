@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 const links = [
   { href: "/today", label: "1-5's" },
   { href: "/board", label: "Task board" },
+  { href: "/updates", label: "Updates" },
 ];
 
 type SessionUser = {
@@ -15,7 +16,7 @@ type SessionUser = {
   avatarUrl: string | null;
 };
 
-export function Nav({ user }: { user: SessionUser }) {
+export function Nav({ user, unreadUpdates = 0 }: { user: SessionUser; unreadUpdates?: number }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -49,6 +50,9 @@ export function Nav({ user }: { user: SessionUser }) {
         {links.map((link) => (
           <Link key={link.href} href={link.href}>
             {link.label}
+            {link.href === "/updates" && unreadUpdates > 0 ? (
+              <span className="site-nav__badge">{unreadUpdates > 9 ? "9+" : unreadUpdates}</span>
+            ) : null}
           </Link>
         ))}
         <Link href="/profile" className="site-nav__profile">

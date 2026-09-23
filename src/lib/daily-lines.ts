@@ -5,7 +5,7 @@ export const DAILY_LINES = [
   {
     slot: 4,
     label: "Challenge",
-    hint: "Setbacks that got in the way of these three priorities",
+    hint: "A challenge that may get in the way of today’s priorities",
   },
   {
     slot: 5,

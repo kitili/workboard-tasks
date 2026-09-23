@@ -6,17 +6,30 @@ export function Pager({
   page,
   pages,
   basePath,
+  param = "page",
+  keep,
   onPage,
 }: {
   page: number;
   pages: number;
   basePath?: string;
+  param?: string;
+  keep?: Record<string, string | number | undefined>;
   onPage?: (page: number) => void;
 }) {
   if (pages <= 1) return null;
 
   const previous = page > 1 ? page - 1 : null;
   const next = page < pages ? page + 1 : null;
+
+  function href(target: number) {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(keep ?? {})) {
+      if (value != null && String(value) !== "") query.set(key, String(value));
+    }
+    query.set(param, String(target));
+    return `${basePath}?${query}`;
+  }
 
   return (
     <nav className="flex items-center justify-between gap-3" aria-label="Pages">
@@ -31,7 +44,7 @@ export function Pager({
         </button>
       ) : (
         <Link
-          href={previous ? `${basePath}?page=${previous}` : "#"}
+          href={previous ? href(previous) : "#"}
           aria-disabled={!previous}
           className={`rounded-xl border border-[#002368]/20 px-4 py-2 text-sm font-medium text-[#002368] ${
             previous ? "" : "pointer-events-none opacity-40"
@@ -54,7 +67,7 @@ export function Pager({
         </button>
       ) : (
         <Link
-          href={next ? `${basePath}?page=${next}` : "#"}
+          href={next ? href(next) : "#"}
           aria-disabled={!next}
           className={`rounded-xl border border-[#002368]/20 px-4 py-2 text-sm font-medium text-[#002368] ${
             next ? "" : "pointer-events-none opacity-40"

@@ -29,14 +29,11 @@ export default async function TodayPage() {
             Three priorities, one challenge, and a progress recap of yesterday. Once you add them, this page clears for tomorrow.
           </p>
         </div>
-        <Link
-          href="/board"
-          className="rounded-xl bg-[#002368] px-4 py-2.5 text-sm font-semibold text-white no-underline hover:bg-[#003a8c] hover:no-underline"
-        >
-          Open the board
+        <Link href="/board?mine=1" className="on-navy rounded-xl px-4 py-2.5 text-sm font-semibold">
+          Open my board
         </Link>
       </div>
-      <TodayForm filed={(me?.slots.length ?? 0) > 0} />
+      <TodayForm filed={(me?.slots.length ?? 0) > 0} saved={me?.slots ?? []} />
       <TaskHistory entries={history.entries} diligence={history.diligence} />
     </div>
   );

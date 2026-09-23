@@ -149,7 +149,7 @@ export function TaskHistory({ entries, diligence }: { entries: Entry[]; diligenc
                   const phase = phaseStyle(entry.status);
                   return (
                     <li key={entry.id} className="flex items-center gap-3 px-5 py-3">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#002368] text-sm font-semibold text-white">
+                      <span className="on-navy flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold">
                         {entry.slot}
                       </span>
                       <p className="min-w-0 flex-1 text-sm text-[#14233B]">
@@ -163,10 +163,14 @@ export function TaskHistory({ entries, diligence }: { entries: Entry[]; diligenc
                       ) : null}
                       <span
                         className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                          entry.slot === 5 ? "bg-[#80BFEC] text-[#002368]" : phase.pill
+                          entry.slot === 4
+                            ? "bg-[#FFC952] text-[#14233B]"
+                            : entry.slot === 5
+                              ? "bg-[#80BFEC] text-[#002368]"
+                              : phase.pill
                         }`}
                       >
-                        {entry.slot === 5 ? "Update" : phase.title}
+                        {entry.slot === 4 ? "Challenge" : entry.slot === 5 ? "Update" : phase.title}
                       </span>
                     </li>
                   );

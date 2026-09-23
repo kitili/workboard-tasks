@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import type { TaskStatus } from "@/generated/prisma/client";
+import { parkUnfinishedDailyTasks } from "@/lib/services/daily-sheet";
 
 export async function getBoardProjects(organizationId?: string) {
   return db.project.findMany({
@@ -18,6 +19,7 @@ const taskInclude = {
 } as const;
 
 export async function getOrganizationBoard(organizationId: string) {
+  await parkUnfinishedDailyTasks(organizationId);
   const [org, tasks, users, project] = await Promise.all([
     db.organization.findUnique({ where: { id: organizationId } }),
     db.task.findMany({

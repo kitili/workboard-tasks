@@ -7,8 +7,12 @@ import type { BoardTask } from "@/lib/board/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function BoardPage() {
-  const [session, org] = await Promise.all([getSessionUser(), getDefaultOrganization()]);
+export default async function BoardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ mine?: string }>;
+}) {
+  const [session, org, params] = await Promise.all([getSessionUser(), getDefaultOrganization(), searchParams]);
   if (!session) redirect("/login");
   if (!org) return <p className="text-zinc-500">No organization yet.</p>;
 
@@ -37,6 +41,11 @@ export default async function BoardPage() {
   }));
 
   return (
-    <KanbanBoard initialTasks={tasks} users={data.users} currentUserId={session?.id ?? null} />
+    <KanbanBoard
+      initialTasks={tasks}
+      users={data.users}
+      currentUserId={session?.id ?? null}
+      mine={params.mine === "1"}
+    />
   );
 }
