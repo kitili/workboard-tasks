@@ -86,7 +86,9 @@ export function KanbanBoard({ initialTasks, users, currentUserId, mine = false }
     if (targetStatus === columnForStatus(task.status)) return;
 
     setTasks((prev) => prev.map((item) => (item.id === taskId ? { ...item, status: targetStatus } : item)));
-    setOpenGroups((prev) => ({ ...prev, [`${targetStatus}:${task.assignee?.id ?? "unassigned"}`]: true }));
+    if (targetStatus !== "COMPLETED") {
+      setOpenGroups((prev) => ({ ...prev, [`${targetStatus}:${task.assignee?.id ?? "unassigned"}`]: true }));
+    }
 
     const res = await fetch(`/api/board/tasks/${taskId}`, {
       method: "PATCH",
@@ -97,6 +99,11 @@ export function KanbanBoard({ initialTasks, users, currentUserId, mine = false }
       setTasks((prev) => prev.map((item) => (item.id === taskId ? task : item)));
       const data = (await res.json().catch(() => null)) as { error?: string } | null;
       setNotice(data?.error ?? "That card stayed where it was.");
+      return;
+    }
+    if (targetStatus === "COMPLETED") {
+      setTasks((prev) => prev.filter((item) => item.id !== taskId));
+      setNotice("Marked Done. It is in 1–5 history and off the board.");
     }
   }
 
@@ -145,8 +152,8 @@ export function KanbanBoard({ initialTasks, users, currentUserId, mine = false }
           </h2>
           <p className="mt-1 text-sm text-zinc-500">
             {personFilter !== "all" && personFilter === currentUserId
-              ? "Only your cards. Drag one from Tasks into In progress, Backlog, or Done."
-              : "Every person’s cards are on the board. Use Show to look at one name. You can move your own cards. Share a card so both of you can move it, or hand it over so only the other person can."}
+              ? "Only your cards. In progress stays here. Drag a card to Done and it leaves the board, marked Done in your 1–5 history."
+              : "Every person’s open cards are here. In progress stays on the board. Done leaves the board and is marked Done in 1–5 history."}
           </p>
         </div>
         <label className="text-sm">

@@ -23,7 +23,7 @@ export async function getOrganizationBoard(organizationId: string) {
   const [org, tasks, users, project] = await Promise.all([
     db.organization.findUnique({ where: { id: organizationId } }),
     db.task.findMany({
-      where: { organizationId, status: { not: "CANCELLED" } },
+      where: { organizationId, status: { notIn: ["CANCELLED", "COMPLETED"] } },
       include: taskInclude,
       orderBy: [{ columnOrder: "asc" }, { updatedAt: "desc" }],
     }),

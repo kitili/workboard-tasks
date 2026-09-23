@@ -65,6 +65,11 @@ export function BoardColumn({
       </header>
 
       <div className="flex min-h-[180px] flex-1 flex-col gap-2 px-2 pb-3">
+        {tasks.length === 0 && column.id === "COMPLETED" ? (
+          <p className="px-2 py-3 text-xs leading-5" style={{ color: "#4f555f" }}>
+            Drop a finished card here. It leaves this column and shows as Done in 1–5 history.
+          </p>
+        ) : null}
         {[...groups.entries()].map(([key, groupTasks]) => {
           const storageKey = `${column.id}:${key}`;
           const open = forceOpen || openGroups[storageKey];
