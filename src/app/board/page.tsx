@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
+import { isBoardAdmin } from "@/lib/auth/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { getDefaultOrganization } from "@/lib/data/dashboard";
 import { getOrganizationBoard } from "@/lib/data/board";
 import { KanbanBoard } from "@/components/board/kanban-board";
+import { getTodaySheet } from "@/lib/services/daily-sheet";
 import type { BoardTask } from "@/lib/board/types";
 
 export const dynamic = "force-dynamic";
@@ -16,8 +18,19 @@ export default async function BoardPage({
   if (!session) redirect("/login");
   if (!org) return <p className="text-zinc-500">No organization yet.</p>;
 
-  const data = await getOrganizationBoard(org.id);
+  const admin = isBoardAdmin(session);
+  const mine = !admin || params.mine === "1";
+  const [data, sheet] = await Promise.all([
+    getOrganizationBoard(org.id, mine ? session.id : undefined),
+    admin ? getTodaySheet(org.id) : Promise.resolve(null),
+  ]);
   if (!data) return <p className="text-zinc-500">No organization yet.</p>;
+  const missingDaily = admin
+    ? (sheet?.people ?? [])
+        .filter((person) => !person.submitted)
+        .map((person) => ({ id: person.id, name: person.name }))
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
+    : [];
 
   const tasks: BoardTask[] = data.tasks.map((task) => ({
     id: task.id,
@@ -44,8 +57,10 @@ export default async function BoardPage({
     <KanbanBoard
       initialTasks={tasks}
       users={data.users}
-      currentUserId={session?.id ?? null}
-      mine={params.mine === "1"}
+      currentUserId={session.id}
+      mine={mine}
+      admin={admin}
+      missingDaily={missingDaily}
     />
   );
 }

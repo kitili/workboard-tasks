@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const links = [
+const staffLinks = [{ href: "/today", label: "1-5's" }];
+
+const adminLinks = [
   { href: "/today", label: "1-5's" },
-  { href: "/board", label: "Task board" },
+  { href: "/board", label: "Admin board" },
   { href: "/updates", label: "Updates" },
 ];
 
@@ -16,9 +18,18 @@ type SessionUser = {
   avatarUrl: string | null;
 };
 
-export function Nav({ user, unreadUpdates = 0 }: { user: SessionUser; unreadUpdates?: number }) {
+export function Nav({
+  user,
+  unreadUpdates = 0,
+  admin = false,
+}: {
+  user: SessionUser;
+  unreadUpdates?: number;
+  admin?: boolean;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const links = admin ? adminLinks : staffLinks;
 
   useEffect(() => {
     setOpen(false);

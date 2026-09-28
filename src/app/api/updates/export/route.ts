@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { format, startOfDay } from "date-fns";
+import { isUpdatesAdmin } from "@/lib/auth/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { listUpdatesForExport } from "@/lib/services/updates";
@@ -18,6 +19,7 @@ function parseDay(value: string | null) {
 export async function GET(request: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Log in first" }, { status: 401 });
+  if (!isUpdatesAdmin(user)) return NextResponse.json({ error: "Not allowed" }, { status: 403 });
 
   const who = request.nextUrl.searchParams.get("who");
   const query = request.nextUrl.searchParams.get("q")?.trim() ?? "";

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { canMoveTask, cardOwnerId } from "@/lib/board/access";
+import { isBoardAdmin } from "@/lib/auth/admin";
+import { canAssignTask, canMoveTask } from "@/lib/board/access";
 import { getSessionUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { getTaskDetail } from "@/lib/data/board";
@@ -49,13 +50,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
 
-    const ownerId = cardOwnerId(existing);
+    const admin = isBoardAdmin(session);
     const moving = body.status && body.status !== existing.status;
-    if (moving && !canMoveTask(existing, session.id)) {
+    if (moving && !canMoveTask(existing, session.id, admin)) {
       return NextResponse.json({ error: "You can only move a card you own, or one shared with you." }, { status: 403 });
     }
-    if ((body.shareWith || body.handoverTo) && session.id !== ownerId) {
-      return NextResponse.json({ error: "Only the card owner can share or hand it over." }, { status: 403 });
+    if ((body.shareWith || body.handoverTo) && !canAssignTask(existing, session.id, admin)) {
+      return NextResponse.json({ error: "Only an admin or the card owner can share or hand it over." }, { status: 403 });
     }
 
     const sharedWithIds = body.handoverTo

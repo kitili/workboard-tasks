@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { DAILY_LINES } from "@/lib/daily-lines";
+import type { TapSuggestion } from "@/lib/data/dt-tech-tap";
 
 type Row = { slot: number; title: string };
 
@@ -11,12 +12,20 @@ const blankRows = (): Row[] => DAILY_LINES.map((line) => ({ slot: line.slot, tit
 export function TodayForm({
   filed,
   saved = [],
+  suggestions = [],
 }: {
   filed: boolean;
   saved?: Array<{ slot: number; title: string }>;
+  suggestions?: TapSuggestion[];
 }) {
   const router = useRouter();
-  const [rows, setRows] = useState<Row[]>(blankRows);
+  const [rows, setRows] = useState<Row[]>(() => {
+    if (suggestions.length === 0) return blankRows();
+    return DAILY_LINES.map((line) => ({
+      slot: line.slot,
+      title: suggestions.find((item) => item.slot === line.slot)?.title ?? "",
+    }));
+  });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(filed);
@@ -98,7 +107,11 @@ export function TodayForm({
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#002368]">01 — 03</p>
             <h3 className="mt-1 font-[family-name:var(--font-display)] text-xl text-[#002368]">Today’s priorities</h3>
-            <p className="mt-1 text-sm text-[#4f555f]">Three things that matter today. Blank lines stay empty.</p>
+            <p className="mt-1 text-sm text-[#4f555f]">
+              {suggestions.length
+                ? "These three came from your Data & Tech TAP. Change a line if today is different, then add them."
+                : "Three things that matter today. Blank lines stay empty."}
+            </p>
           </div>
           {priorities.map((line) => (
             <LineField

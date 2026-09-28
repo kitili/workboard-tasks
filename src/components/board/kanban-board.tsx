@@ -15,7 +15,8 @@ import {
 } from "@dnd-kit/core";
 import { canMoveTask, cardOwnerId } from "@/lib/board/access";
 import { BOARD_COLUMNS, PRIORITY_LABELS, columnForStatus } from "@/lib/board/columns";
-import type { BoardTask, BoardUser } from "@/lib/board/types";
+import { MissingDailyList } from "@/components/board/missing-daily-list";
+import type { BoardTask, BoardUser, MissingDailyPerson } from "@/lib/board/types";
 import { BoardColumn } from "@/components/board/board-column";
 
 type KanbanBoardProps = {
@@ -23,6 +24,8 @@ type KanbanBoardProps = {
   users: BoardUser[];
   currentUserId: string | null;
   mine?: boolean;
+  admin?: boolean;
+  missingDaily?: MissingDailyPerson[];
 };
 
 const collisionDetection: CollisionDetection = (args) => {
@@ -41,13 +44,27 @@ function groupByStatus(tasks: BoardTask[]): Record<string, BoardTask[]> {
   return grouped;
 }
 
-export function KanbanBoard({ initialTasks, users, currentUserId, mine = false }: KanbanBoardProps) {
+export function KanbanBoard({
+  initialTasks,
+  users,
+  currentUserId,
+  mine = false,
+  admin = false,
+  missingDaily = [],
+}: KanbanBoardProps) {
   const [tasks, setTasks] = useState(initialTasks);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [personFilter, setPersonFilter] = useState(mine && currentUserId ? currentUserId : "all");
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [notice, setNotice] = useState("");
 
+  const people = useMemo(
+    () =>
+      [...users].sort((a, b) =>
+        (a.name ?? a.username ?? a.phone).localeCompare(b.name ?? b.username ?? b.phone, undefined, { sensitivity: "base" }),
+      ),
+    [users],
+  );
   const visible = useMemo(
     () =>
       personFilter === "all"
@@ -62,7 +79,7 @@ export function KanbanBoard({ initialTasks, users, currentUserId, mine = false }
 
   function handleDragStart(event: DragStartEvent) {
     const task = tasks.find((item) => item.id === String(event.active.id));
-    if (!task || !canMoveTask(task, currentUserId)) return;
+    if (!task || !canMoveTask(task, currentUserId, admin)) return;
     setActiveId(String(event.active.id));
   }
 
@@ -73,7 +90,7 @@ export function KanbanBoard({ initialTasks, users, currentUserId, mine = false }
 
     const taskId = String(active.id);
     const task = tasks.find((item) => item.id === taskId);
-    if (!task || !canMoveTask(task, currentUserId)) return;
+    if (!task || !canMoveTask(task, currentUserId, admin)) return;
 
     const overData = over.data.current as { type?: string; status?: string } | undefined;
     let targetStatus: string = columnForStatus(task.status);
@@ -86,9 +103,7 @@ export function KanbanBoard({ initialTasks, users, currentUserId, mine = false }
     if (targetStatus === columnForStatus(task.status)) return;
 
     setTasks((prev) => prev.map((item) => (item.id === taskId ? { ...item, status: targetStatus } : item)));
-    if (targetStatus !== "COMPLETED") {
-      setOpenGroups((prev) => ({ ...prev, [`${targetStatus}:${task.assignee?.id ?? "unassigned"}`]: true }));
-    }
+    setOpenGroups((prev) => ({ ...prev, [`${targetStatus}:${task.assignee?.id ?? "unassigned"}`]: true }));
 
     const res = await fetch(`/api/board/tasks/${taskId}`, {
       method: "PATCH",
@@ -102,8 +117,7 @@ export function KanbanBoard({ initialTasks, users, currentUserId, mine = false }
       return;
     }
     if (targetStatus === "COMPLETED") {
-      setTasks((prev) => prev.filter((item) => item.id !== taskId));
-      setNotice("Marked Done. It is in 1–5 history and off the board.");
+      setNotice("Marked Done for today. It stays here until tomorrow, and 1–5 history keeps it as Done.");
     }
   }
 
@@ -148,32 +162,35 @@ export function KanbanBoard({ initialTasks, users, currentUserId, mine = false }
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold">
-            {personFilter !== "all" && personFilter === currentUserId ? "My board" : "Silverleaf Tasks"}
+            {admin && !mine ? "Admin board" : personFilter !== "all" && personFilter === currentUserId ? "My board" : "Silverleaf Tasks"}
           </h2>
           <p className="mt-1 text-sm text-zinc-500">
-            {personFilter !== "all" && personFilter === currentUserId
-              ? "Only your cards. In progress stays here. Drag a card to Done and it leaves the board, marked Done in your 1–5 history."
-              : "Every person’s open cards are here. In progress stays on the board. Done leaves the board and is marked Done in 1–5 history."}
+            {admin && !mine
+              ? "Everyone’s 1–5 cards. You can move a card or hand ownership to someone else."
+              : "Only your cards. Done stays visible for today, then clears tomorrow. 1–5 history keeps it as Done."}
           </p>
         </div>
-        <label className="text-sm">
-          <span className="mr-2 text-zinc-500">Show</span>
-          <select
-            value={personFilter}
-            onChange={(e) => setPersonFilter(e.target.value)}
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-2"
-          >
-            <option value="all">Everyone</option>
-            {users.map((user) => (
-              <option key={user.id} value={user.id}>
-                {user.name ?? user.username ?? user.phone}
-              </option>
-            ))}
-          </select>
-        </label>
+        {admin && !mine ? (
+          <label className="text-sm">
+            <span className="mr-2 text-zinc-500">Show</span>
+            <select
+              value={personFilter}
+              onChange={(e) => setPersonFilter(e.target.value)}
+              className="rounded-lg border border-zinc-300 bg-white px-3 py-2"
+            >
+              <option value="all">Everyone</option>
+              {people.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name ?? user.username ?? user.phone}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </div>
 
       {notice ? <p className="mb-4 text-sm text-[#002368]">{notice}</p> : null}
+      {admin && !mine ? <MissingDailyList people={missingDaily} /> : null}
 
       <DndContext
         sensors={sensors}
@@ -187,11 +204,12 @@ export function KanbanBoard({ initialTasks, users, currentUserId, mine = false }
               key={column.id}
               column={column}
               tasks={columns[column.id] ?? []}
-              users={users}
+              users={people}
               forceOpen={false}
               openGroups={openGroups}
               onToggleGroup={(key) => setOpenGroups((prev) => ({ ...prev, [key]: !prev[key] }))}
               currentUserId={currentUserId}
+              admin={admin}
               onChangeTask={(id, patch) => void changeTask(id, patch)}
             />
           ))}

@@ -1,3 +1,4 @@
+import { startOfDay } from "date-fns";
 import { db } from "@/lib/db";
 import type { TaskStatus } from "@/generated/prisma/client";
 import { parkUnfinishedDailyTasks } from "@/lib/services/daily-sheet";
@@ -18,12 +19,20 @@ const taskInclude = {
   _count: { select: { comments: true } },
 } as const;
 
-export async function getOrganizationBoard(organizationId: string) {
+export async function getOrganizationBoard(organizationId: string, assigneeId?: string) {
   await parkUnfinishedDailyTasks(organizationId);
   const [org, tasks, users, project] = await Promise.all([
     db.organization.findUnique({ where: { id: organizationId } }),
     db.task.findMany({
-      where: { organizationId, status: { notIn: ["CANCELLED", "COMPLETED"] } },
+      where: {
+        organizationId,
+        ...(assigneeId ? { assigneeId } : {}),
+        status: { not: "CANCELLED" },
+        OR: [
+          { status: { not: "COMPLETED" } },
+          { status: "COMPLETED", completedAt: { gte: startOfDay(new Date()) } },
+        ],
+      },
       include: taskInclude,
       orderBy: [{ columnOrder: "asc" }, { updatedAt: "desc" }],
     }),

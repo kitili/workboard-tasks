@@ -14,6 +14,7 @@ type BoardColumnProps = {
   openGroups: Record<string, boolean>;
   onToggleGroup: (key: string) => void;
   currentUserId: string | null;
+  admin?: boolean;
   onChangeTask: (taskId: string, patch: { priority?: string | null; shareWith?: string; handoverTo?: string }) => void;
 };
 
@@ -33,6 +34,7 @@ export function BoardColumn({
   openGroups,
   onToggleGroup,
   currentUserId,
+  admin = false,
   onChangeTask,
 }: BoardColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
@@ -67,10 +69,14 @@ export function BoardColumn({
       <div className="flex min-h-[180px] flex-1 flex-col gap-2 px-2 pb-3">
         {tasks.length === 0 && column.id === "COMPLETED" ? (
           <p className="px-2 py-3 text-xs leading-5" style={{ color: "#4f555f" }}>
-            Drop a finished card here. It leaves this column and shows as Done in 1–5 history.
+            Drop a finished card here. It stays for today so everyone can see it, then leaves tomorrow. 1–5 history keeps it as Done.
           </p>
         ) : null}
-        {[...groups.entries()].map(([key, groupTasks]) => {
+        {[...groups.entries()]
+          .sort((a, b) =>
+            personName(a[1][0]).localeCompare(personName(b[1][0]), undefined, { sensitivity: "base" }),
+          )
+          .map(([key, groupTasks]) => {
           const storageKey = `${column.id}:${key}`;
           const open = forceOpen || openGroups[storageKey];
           const ids = groupTasks.map((task) => task.id);
@@ -100,6 +106,7 @@ export function BoardColumn({
                         columnStatus={column.id}
                         users={users}
                         currentUserId={currentUserId}
+                        admin={admin}
                         onChange={onChangeTask}
                       />
                     ))}

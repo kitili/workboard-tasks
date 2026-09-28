@@ -26,6 +26,11 @@ export type BoardUser = {
   phone: string;
 };
 
+export type MissingDailyPerson = {
+  id: string;
+  name: string;
+};
+
 export type BoardProject = {
   id: string;
   name: string;

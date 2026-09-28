@@ -159,7 +159,7 @@ export async function getTodaySheet(organizationId?: string) {
         id: person.id,
         name: person.name ?? person.phone,
         phone: person.phone,
-        submitted: !!plan,
+        submitted: !!plan && plan.items.length > 0,
         slots: plan
           ? plan.items.map((item) => ({
               slot: item.slot,

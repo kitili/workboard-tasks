@@ -2,7 +2,7 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { canMoveTask, cardOwnerId } from "@/lib/board/access";
+import { canAssignTask, canMoveTask } from "@/lib/board/access";
 import { BOARD_COLUMNS, PRIORITY_LABELS } from "@/lib/board/columns";
 import { dailyLineLabel } from "@/lib/daily-lines";
 import type { BoardTask, BoardUser } from "@/lib/board/types";
@@ -12,6 +12,7 @@ type TaskCardProps = {
   columnStatus: string;
   users: BoardUser[];
   currentUserId: string | null;
+  admin?: boolean;
   onChange: (taskId: string, patch: { priority?: string | null; shareWith?: string; handoverTo?: string }) => void;
 };
 
@@ -20,9 +21,9 @@ function personName(users: BoardUser[], id: string) {
   return user?.name ?? user?.username ?? "Someone";
 }
 
-export function TaskCard({ task, columnStatus, users, currentUserId, onChange }: TaskCardProps) {
-  const allowed = canMoveTask(task, currentUserId);
-  const owner = cardOwnerId(task) === currentUserId;
+export function TaskCard({ task, columnStatus, users, currentUserId, admin = false, onChange }: TaskCardProps) {
+  const allowed = canMoveTask(task, currentUserId, admin);
+  const canAssign = canAssignTask(task, currentUserId, admin);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     data: { type: "task", status: columnStatus },
@@ -69,7 +70,7 @@ export function TaskCard({ task, columnStatus, users, currentUserId, onChange }:
       </div>
 
       <div className="grid gap-2 px-3 pt-2 pb-3" onPointerDown={(e) => e.stopPropagation()}>
-        {owner ? (
+        {canAssign ? (
           <>
             <label className="block">
               <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">Share</span>
@@ -80,7 +81,7 @@ export function TaskCard({ task, columnStatus, users, currentUserId, onChange }:
                 }}
                 className="mt-1 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1.5 text-xs"
               >
-                <option value="">Share, both of you can move it</option>
+                <option value="">{admin ? "Share this card so they can also move it" : "Share, both of you can move it"}</option>
                 {users
                   .filter((user) => user.id !== currentUserId)
                   .map((user) => (
@@ -91,7 +92,9 @@ export function TaskCard({ task, columnStatus, users, currentUserId, onChange }:
               </select>
             </label>
             <label className="block">
-              <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">Hand over</span>
+              <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+                {admin ? "Give ownership" : "Hand over"}
+              </span>
               <select
                 value=""
                 onChange={(e) => {
@@ -99,7 +102,7 @@ export function TaskCard({ task, columnStatus, users, currentUserId, onChange }:
                 }}
                 className="mt-1 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1.5 text-xs"
               >
-                <option value="">Hand over, only they can move it</option>
+                <option value="">{admin ? "Give this card to someone else" : "Hand over, only they can move it"}</option>
                 {users
                   .filter((user) => user.id !== currentUserId)
                   .map((user) => (

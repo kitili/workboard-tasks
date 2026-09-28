@@ -74,7 +74,9 @@ export function TaskHistory({ entries, diligence }: { entries: Entry[]; diligenc
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h3 className="text-lg font-semibold">History</h3>
-          <p className="text-sm text-[#4f555f]">The lists you wrote, numbered the way you first entered them.</p>
+          <p className="text-sm text-[#4f555f]">
+            Each day keeps your tasks with that day’s challenge and progress recap.
+          </p>
         </div>
         <a
           href={exportHref}
@@ -137,47 +139,61 @@ export function TaskHistory({ entries, diligence }: { entries: Entry[]; diligenc
         </p>
       ) : (
         <div className="space-y-4">
-          {pageDays.map((day) => (
+          {pageDays.map((day) => {
+            const tasks = day.items.filter((entry) => entry.slot <= 3);
+            const notes = day.items.filter((entry) => entry.slot >= 4);
+            return (
             <article key={day.key} className="overflow-hidden rounded-2xl border border-[#002368]/10 bg-white shadow-sm">
               <header className="border-b border-[#002368]/10 bg-[#f4f7fb] px-5 py-3">
                 <h4 className="text-sm font-semibold text-[#002368]">
                   {format(new Date(day.items[0].date), "EEEE, d MMM yyyy")}
                 </h4>
               </header>
+              {tasks.length > 0 ? (
               <ol className="divide-y divide-zinc-100">
-                {day.items.map((entry) => {
-                  const phase = phaseStyle(entry.status);
-                  return (
-                    <li key={entry.id} className="flex items-center gap-3 px-5 py-3">
-                      <span className="on-navy flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold">
-                        {entry.slot}
-                      </span>
-                      <p className="min-w-0 flex-1 text-sm text-[#14233B]">
-                        <span className="mr-2 text-xs font-semibold uppercase tracking-wide text-[#818283]">
-                          {dailyLineLabel(entry.slot)}
+                {tasks.map((entry) => {
+                    const phase = phaseStyle(entry.status);
+                    return (
+                      <li key={entry.id} className="flex items-center gap-3 px-5 py-3">
+                        <span className="on-navy flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold">
+                          {entry.slot}
                         </span>
-                        {entry.title}
-                      </p>
-                      {entry.priority ? (
-                        <span className="hidden text-xs capitalize text-[#818283] sm:inline">{entry.priority.toLowerCase()}</span>
-                      ) : null}
-                      <span
-                        className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                          entry.slot === 4
-                            ? "bg-[#FFC952] text-[#14233B]"
-                            : entry.slot === 5
-                              ? "bg-[#80BFEC] text-[#002368]"
-                              : phase.pill
-                        }`}
-                      >
-                        {entry.slot === 4 ? "Challenge" : entry.slot === 5 ? "Update" : phase.title}
-                      </span>
-                    </li>
-                  );
-                })}
+                        <p className="min-w-0 flex-1 text-sm text-[#14233B]">
+                          <span className="mr-2 text-xs font-semibold uppercase tracking-wide text-[#818283]">
+                            {dailyLineLabel(entry.slot)}
+                          </span>
+                          {entry.title}
+                        </p>
+                        {entry.priority ? (
+                          <span className="hidden text-xs capitalize text-[#818283] sm:inline">{entry.priority.toLowerCase()}</span>
+                        ) : null}
+                        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${phase.pill}`}>
+                          {phase.title}
+                        </span>
+                      </li>
+                    );
+                  })}
               </ol>
+              ) : null}
+              {notes.length > 0 ? (
+                <div className="space-y-2 border-t border-[#002368]/10 bg-[#f4f7fb] px-5 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-[#002368]">Updates with these tasks</p>
+                  {notes.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className={`rounded-xl px-3 py-2 ${entry.slot === 4 ? "bg-[#FFF7E5]" : "bg-[#D9ECF9]"}`}
+                      >
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-[#818283]">
+                          {entry.slot === 4 ? "Challenge" : "Progress recap"}
+                        </p>
+                        <p className="mt-1 text-sm text-[#14233B]">{entry.title}</p>
+                      </div>
+                    ))}
+                </div>
+              ) : null}
             </article>
-          ))}
+            );
+          })}
           <Pager page={safePage} pages={pages} onPage={setPage} />
         </div>
       )}
