@@ -32,6 +32,7 @@ export function isBoardAdmin(user: AdminPerson | null | undefined) {
     named(user, "krupa", ["patel"]) ||
     named(user, "cook") ||
     named(user, "maureen", ["kitili", "kittili"]) ||
+    named(user, "mourine", ["kitili", "kittili"]) ||
     named(user, "paul", ["victor"])
   );
 }
