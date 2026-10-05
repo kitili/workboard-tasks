@@ -115,7 +115,10 @@ async function main() {
   );
   check(typeof kpi.overall.tapPct === "number", "KPI overall TAP percent is a number");
   const eceTap = tapDepartment("ece");
-  check(eceTap?.items.some((item) => item.owners.includes("Julius") && (item.helpers ?? []).includes("Pascaline")), "ECE 6.0 helpers include Pascaline");
+  check(
+    Boolean(eceTap?.items.some((item) => item.owners.includes("Julius") && (item.helpers ?? []).includes("Pascaline"))),
+    "ECE 6.0 helpers include Pascaline",
+  );
 
   if (failures.length) {
     console.log(`\n${failures.length} failed`);
