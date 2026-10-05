@@ -55,6 +55,7 @@ export async function getSessionUser() {
       organizationId: true,
       role: true,
       jobTitle: true,
+      departmentSlug: true,
       bio: true,
       avatarUrl: true,
     },

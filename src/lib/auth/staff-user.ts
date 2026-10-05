@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { getEnv } from "@/lib/env";
 import { setSession } from "@/lib/auth/session";
+import { inferDepartment } from "@/lib/departments";
 
 export async function openStaffSession(input: {
   email: string;
@@ -14,11 +15,21 @@ export async function openStaffSession(input: {
   const existing = await db.user.findUnique({ where: { email } });
   if (existing) {
     if (!existing.isActive) return { ok: false as const, error: "inactive" as const };
+    const nextTitle = existing.jobTitle?.trim() ? existing.jobTitle : jobTitle;
+    const departmentSlug =
+      existing.departmentSlug ??
+      inferDepartment({
+        name: existing.name?.trim() ? existing.name : name,
+        username: existing.username,
+        email,
+        jobTitle: nextTitle,
+      });
     await db.user.update({
       where: { id: existing.id },
       data: {
         name: existing.name?.trim() ? existing.name : name,
-        jobTitle: existing.jobTitle?.trim() ? existing.jobTitle : jobTitle,
+        jobTitle: nextTitle,
+        departmentSlug,
       },
     });
     await setSession(existing.id);
@@ -44,6 +55,7 @@ export async function openStaffSession(input: {
       username,
       name,
       jobTitle,
+      departmentSlug: inferDepartment({ name, username, email, jobTitle }),
       phone: `mail:${email}`,
       organizationId: org.id,
     },

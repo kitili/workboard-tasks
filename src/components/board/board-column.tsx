@@ -15,7 +15,12 @@ type BoardColumnProps = {
   onToggleGroup: (key: string) => void;
   currentUserId: string | null;
   admin?: boolean;
-  onChangeTask: (taskId: string, patch: { priority?: string | null; shareWith?: string; handoverTo?: string }) => void;
+  assignUsers?: BoardUser[];
+  viewerDept?: string | null;
+  onChangeTask: (
+    taskId: string,
+    patch: { title?: string; priority?: string | null; shareWith?: string; handoverTo?: string; assigneeId?: string | null },
+  ) => void;
 };
 
 function personKey(task: BoardTask) {
@@ -35,6 +40,8 @@ export function BoardColumn({
   onToggleGroup,
   currentUserId,
   admin = false,
+  assignUsers,
+  viewerDept = null,
   onChangeTask,
 }: BoardColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
@@ -105,8 +112,10 @@ export function BoardColumn({
                         task={task}
                         columnStatus={column.id}
                         users={users}
+                        assignUsers={assignUsers}
                         currentUserId={currentUserId}
                         admin={admin}
+                        viewerDept={viewerDept}
                         onChange={onChangeTask}
                       />
                     ))}

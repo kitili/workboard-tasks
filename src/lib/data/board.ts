@@ -19,26 +19,45 @@ const taskInclude = {
   _count: { select: { comments: true } },
 } as const;
 
-export async function getOrganizationBoard(organizationId: string, assigneeId?: string) {
+export async function getOrganizationBoard(
+  organizationId: string,
+  options: { assigneeId?: string; departmentSlug?: string | null } = {},
+) {
   await parkUnfinishedDailyTasks(organizationId);
   const [org, tasks, users, project] = await Promise.all([
     db.organization.findUnique({ where: { id: organizationId } }),
     db.task.findMany({
       where: {
         organizationId,
-        ...(assigneeId ? { assigneeId } : {}),
+        ...(options.assigneeId ? { assigneeId: options.assigneeId } : {}),
         status: { not: "CANCELLED" },
-        OR: [
-          { status: { not: "COMPLETED" } },
-          { status: "COMPLETED", completedAt: { gte: startOfDay(new Date()) } },
+        AND: [
+          options.departmentSlug
+            ? {
+                OR: [
+                  { departmentSlug: options.departmentSlug },
+                  { assignee: { is: { departmentSlug: options.departmentSlug } } },
+                ],
+              }
+            : {},
+          {
+            OR: [
+              { status: { not: "COMPLETED" } },
+              { status: "COMPLETED", completedAt: { gte: startOfDay(new Date()) } },
+            ],
+          },
         ],
       },
       include: taskInclude,
       orderBy: [{ columnOrder: "asc" }, { updatedAt: "desc" }],
     }),
     db.user.findMany({
-      where: { organizationId, isActive: true },
-      select: { id: true, name: true, username: true, phone: true },
+      where: {
+        organizationId,
+        isActive: true,
+        ...(options.departmentSlug ? { departmentSlug: options.departmentSlug } : {}),
+      },
+      select: { id: true, name: true, username: true, phone: true, departmentSlug: true },
       orderBy: { name: "asc" },
     }),
     db.project.findFirst({

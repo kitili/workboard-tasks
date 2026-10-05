@@ -5,6 +5,8 @@ import "@fontsource/bai-jamjuree/400.css";
 import "@fontsource/bai-jamjuree/600.css";
 import { Nav } from "@/components/nav";
 import { isBoardAdmin, isUpdatesAdmin } from "@/lib/auth/admin";
+import { departmentNameFor } from "@/lib/departments";
+import { syncUserDepartment } from "@/lib/services/departments";
 import { getSessionUser } from "@/lib/auth/session";
 import { countUnreadUpdates } from "@/lib/services/updates";
 import "./globals.css";
@@ -17,6 +19,7 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const user = await getSessionUser();
+  const departmentSlug = user ? await syncUserDepartment(user.id) : null;
   const unreadUpdates =
     user && isUpdatesAdmin(user) ? await countUnreadUpdates(user.organizationId, user.id) : 0;
 
@@ -32,6 +35,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             }}
             unreadUpdates={unreadUpdates}
             admin={isBoardAdmin(user)}
+            departmentName={departmentNameFor({ ...user, departmentSlug })}
           />
         ) : null}
         <main className="app-main">{children}</main>

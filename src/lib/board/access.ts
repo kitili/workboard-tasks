@@ -19,11 +19,19 @@ export function canMoveTask(
 }
 
 export function canAssignTask(
-  task: { moveOwnerId?: string | null; authorId?: string | null; assignee?: { id: string } | null },
+  task: {
+    moveOwnerId?: string | null;
+    authorId?: string | null;
+    assigneeId?: string | null;
+    assignee?: { id: string } | null;
+    departmentSlug?: string | null;
+  },
   userId: string | null,
   admin = false,
+  viewerDept?: string | null,
 ) {
   if (!userId) return false;
   if (admin) return true;
-  return cardOwnerId(task) === userId;
+  if (cardOwnerId(task) === userId) return true;
+  return !cardOwnerId(task) && !!task.departmentSlug && task.departmentSlug === viewerDept;
 }

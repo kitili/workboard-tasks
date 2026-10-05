@@ -3,38 +3,50 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { DAILY_LINES } from "@/lib/daily-lines";
-import type { TapSuggestion } from "@/lib/data/dt-tech-tap";
+import type { TapSuggestion } from "@/lib/departments";
 
-type Row = { slot: number; title: string };
+type Row = { slot: number; title: string; taskId?: string | null };
+export type PickableTask = { id: string; title: string; status: string; tap: boolean };
 
-const blankRows = (): Row[] => DAILY_LINES.map((line) => ({ slot: line.slot, title: "" }));
+function rowsFrom(saved: Array<{ slot: number; title: string; taskId?: string | null }>, suggestions: TapSuggestion[]): Row[] {
+  return DAILY_LINES.map((line) => ({
+    slot: line.slot,
+    title:
+      saved.find((item) => item.slot === line.slot)?.title ??
+      suggestions.find((item) => item.slot === line.slot)?.title ??
+      "",
+    taskId: saved.find((item) => item.slot === line.slot)?.taskId ?? null,
+  }));
+}
 
 export function TodayForm({
   filed,
   saved = [],
   suggestions = [],
+  pickable = [],
+  departmentName = null,
 }: {
   filed: boolean;
-  saved?: Array<{ slot: number; title: string }>;
+  saved?: Array<{ slot: number; title: string; taskId?: string | null }>;
   suggestions?: TapSuggestion[];
+  pickable?: PickableTask[];
+  departmentName?: string | null;
 }) {
   const router = useRouter();
-  const [rows, setRows] = useState<Row[]>(() => {
-    if (suggestions.length === 0) return blankRows();
-    return DAILY_LINES.map((line) => ({
-      slot: line.slot,
-      title: suggestions.find((item) => item.slot === line.slot)?.title ?? "",
-    }));
-  });
+  const [rows, setRows] = useState<Row[]>(() => rowsFrom(saved, filed ? [] : suggestions));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [done, setDone] = useState(filed);
+  const [notice, setNotice] = useState(filed ? "Tweak a line, pick a TAP card, or take one out. Save when it feels right." : "");
+
+  function setRow(slot: number, patch: Partial<Row>) {
+    setRows((current) => current.map((item) => (item.slot === slot ? { ...item, ...patch } : item)));
+  }
 
   async function saveList(e: React.FormEvent) {
     e.preventDefault();
     const slots = rows.filter((row) => row.title.trim());
     if (slots.length === 0) {
-      setError("Fill in at least one open line.");
+      setError("Add or pick at least one line for today.");
       return;
     }
     setSaving(true);
@@ -46,6 +58,7 @@ export function TodayForm({
         slots: slots.map((row) => ({
           slot: row.slot,
           title: row.title,
+          taskId: row.taskId || undefined,
           priority: null,
         })),
       }),
@@ -53,64 +66,34 @@ export function TodayForm({
     const data = (await res.json()) as { error?: string };
     setSaving(false);
     if (!res.ok) {
-      setError(data.error ?? "Could not add those tasks");
+      setError(data.error ?? "Could not keep those tasks");
       return;
     }
-    setRows(blankRows());
-    setDone(true);
+    setNotice("Kept. Your board has the same words.");
     router.refresh();
   }
 
-  if (done) {
-    return (
-      <section className="overflow-hidden rounded-2xl border border-[#002368]/10 bg-white shadow-sm">
-        <div className="h-1.5 bg-[#FFC952]" />
-        <div className="space-y-4 px-6 py-8">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#002368]">Filed</p>
-            <h3 className="mt-2 font-[family-name:var(--font-display)] text-2xl text-[#002368]">Today is done</h3>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-[#4f555f]">
-              These are the words you wrote. The list stays here until tomorrow.
-            </p>
-          </div>
-          <ol className="space-y-3">
-            {DAILY_LINES.map((line) => {
-              const title = saved.find((item) => item.slot === line.slot)?.title?.trim();
-              if (!title) return null;
-              const panel =
-                line.slot === 5 ? "bg-[#D9ECF9]" : line.slot === 4 ? "bg-[#FFF7E5]" : "bg-[#f4f7fb]";
-              return (
-                <li key={line.slot} className={`flex items-start gap-3 rounded-xl p-4 ${panel}`}>
-                  <span className="on-navy flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold">
-                    {line.slot}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-[#002368]">{line.label}</p>
-                    <p className="mt-1 text-sm leading-6 text-[#14233B]">{title}</p>
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-        </div>
-      </section>
-    );
+  async function removeLine(slot: number) {
+    setRow(slot, { title: "", taskId: null });
+    if (!filed) return;
+    await fetch(`/api/today?slot=${slot}`, { method: "DELETE" });
+    setNotice("Taken out of today.");
+    router.refresh();
   }
 
   const priorities = DAILY_LINES.filter((line) => line.slot <= 3);
 
   return (
-    <form onSubmit={saveList} className="overflow-hidden rounded-2xl border border-[#002368]/10 bg-white shadow-sm">
-      <div className="h-1.5 bg-[#002368]" />
+    <form onSubmit={saveList} className="overflow-hidden rounded-3xl border border-[#002368]/10 bg-white shadow-sm">
+      <div className="h-2 bg-[linear-gradient(90deg,#002368,#80BFEC,#FFC952)]" />
       <div className="space-y-6 p-6">
+        {notice ? <p className="rounded-2xl bg-[#FFF7E5] px-4 py-3 text-sm text-[#14233B]">{notice}</p> : null}
         <section className="space-y-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#002368]">01 — 03</p>
-            <h3 className="mt-1 font-[family-name:var(--font-display)] text-xl text-[#002368]">Today’s priorities</h3>
+            <h3 className="mt-1 font-[family-name:var(--font-display)] text-xl text-[#002368]">Today’s three</h3>
             <p className="mt-1 text-sm text-[#4f555f]">
-              {suggestions.length
-                ? "These three came from your Data & Tech TAP. Change a line if today is different, then add them."
-                : "Three things that matter today. Blank lines stay empty."}
+              Add from your TAP, write your own, or take a line out. {departmentName ? `${departmentName} first.` : ""}
             </p>
           </div>
           {priorities.map((line) => (
@@ -118,49 +101,49 @@ export function TodayForm({
               key={line.slot}
               line={line}
               value={rows[line.slot - 1]?.title ?? ""}
-              onChange={(title) =>
-                setRows((current) => current.map((item) => (item.slot === line.slot ? { ...item, title } : item)))
-              }
+              pickable={pickable}
+              source={!filed ? suggestions.find((item) => item.slot === line.slot)?.source : undefined}
+              onChange={(title) => setRow(line.slot, { title, taskId: null })}
+              onPick={(task) => setRow(line.slot, { title: task.title, taskId: task.id })}
+              onRemove={() => void removeLine(line.slot)}
             />
           ))}
         </section>
 
-        <section className="space-y-3 rounded-xl bg-[#FFF7E5] p-4">
+        <section className="space-y-3 rounded-3xl bg-[#FFF7E5] p-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#14233B]">04</p>
-            <h3 className="mt-1 font-[family-name:var(--font-display)] text-xl text-[#002368]">Challenge</h3>
-            <p className="mt-1 text-sm text-[#4f555f]">
-              A challenge that may get in the way of the goals or tasks you set.
-            </p>
+            <h3 className="mt-1 font-[family-name:var(--font-display)] text-xl text-[#002368]">The wobble</h3>
+            <p className="mt-1 text-sm text-[#4f555f]">What might get in the way today.</p>
           </div>
           <LineField
             line={DAILY_LINES[3]}
             value={rows[3]?.title ?? ""}
-            onChange={(title) => setRows((current) => current.map((item) => (item.slot === 4 ? { ...item, title } : item)))}
+            onChange={(title) => setRow(4, { title })}
+            onRemove={() => void removeLine(4)}
           />
         </section>
 
-        <section className="space-y-3 rounded-xl bg-[#D9ECF9] p-4">
+        <section className="space-y-3 rounded-3xl bg-[#D9ECF9] p-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#002368]">05</p>
-            <h3 className="mt-1 font-[family-name:var(--font-display)] text-xl text-[#002368]">Progress recap</h3>
-            <p className="mt-1 text-sm text-[#4f555f]">A recap of the previous day’s progress.</p>
+            <h3 className="mt-1 font-[family-name:var(--font-display)] text-xl text-[#002368]">Yesterday’s glow</h3>
+            <p className="mt-1 text-sm text-[#4f555f]">A short recap of what moved.</p>
           </div>
           <LineField
             line={DAILY_LINES[4]}
             value={rows[4]?.title ?? ""}
-            onChange={(title) => setRows((current) => current.map((item) => (item.slot === 5 ? { ...item, title } : item)))}
+            onChange={(title) => setRow(5, { title })}
+            onRemove={() => void removeLine(5)}
           />
         </section>
 
-        <button
-          type="submit"
-          disabled={saving}
-          className="on-navy rounded-xl px-5 py-2.5 text-sm font-semibold disabled:opacity-50"
-        >
-          {saving ? "Adding…" : "Add to my tasks"}
-        </button>
-        {error ? <p className="text-sm text-[#002368]">{error}</p> : null}
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="submit" disabled={saving} className="on-navy rounded-full px-5 py-2.5 text-sm font-semibold disabled:opacity-50">
+            {saving ? "Keeping…" : "Keep today’s 1–5"}
+          </button>
+          {error ? <p className="text-sm text-[#002368]">{error}</p> : null}
+        </div>
       </div>
     </form>
   );
@@ -169,31 +152,77 @@ export function TodayForm({
 function LineField({
   line,
   value,
+  source,
+  pickable,
   onChange,
+  onPick,
+  onRemove,
 }: {
   line: (typeof DAILY_LINES)[number];
   value: string;
+  source?: string;
+  pickable?: PickableTask[];
   onChange: (title: string) => void;
+  onPick?: (task: PickableTask) => void;
+  onRemove: () => void;
 }) {
   const challenge = line.slot === 4;
+  const filled = Boolean(value.trim());
 
   return (
-    <label className="grid grid-cols-[40px_1fr] items-center gap-3">
-      <span
-        className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold ${
-          challenge ? "bg-[#FFC952]" : "on-navy"
-        }`}
-        style={challenge ? { color: "#14233B", WebkitTextFillColor: "#14233B" } : undefined}
-      >
-        {line.slot}
-      </span>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={line.hint}
-        className="rounded-xl border border-[#002368]/15 px-3 py-2.5 text-sm"
-        style={{ color: "#14233B", backgroundColor: "#ffffff" }}
-      />
-    </label>
+    <div className="rounded-3xl border border-[#002368]/8 bg-white/70 p-3">
+      <div className="grid grid-cols-[40px_1fr] items-start gap-3">
+        <span
+          className={`mt-0.5 flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold ${
+            challenge ? "bg-[#FFC952]" : "on-navy"
+          }`}
+          style={challenge ? { color: "#14233B", WebkitTextFillColor: "#14233B" } : undefined}
+        >
+          {line.slot}
+        </span>
+        <div className="space-y-2">
+          {pickable?.length && onPick ? (
+            <select
+              defaultValue=""
+              onChange={(e) => {
+                const task = pickable.find((item) => item.id === e.target.value);
+                if (task) onPick(task);
+                e.currentTarget.value = "";
+              }}
+              className="w-full rounded-2xl border border-[#002368]/15 bg-[#F4FBFF] px-3 py-2 text-sm"
+            >
+              <option value="">Add from my TAP…</option>
+              {pickable.map((task) => (
+                <option key={task.id} value={task.id}>
+                  {task.tap ? "TAP · " : ""}
+                  {task.title}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          <input
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={line.hint}
+            className="w-full rounded-2xl border border-[#002368]/15 px-3 py-2.5 text-sm"
+            style={{ color: "#14233B", backgroundColor: "#ffffff" }}
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            {source ? <span className="text-xs text-[#4f555f]">{source}</span> : null}
+            <span className="ml-auto flex gap-2">
+              {filled ? (
+                <button
+                  type="button"
+                  onClick={onRemove}
+                  className="rounded-full bg-[#FFF0F0] px-3 py-1 text-xs font-semibold text-[#9B2C2C]"
+                >
+                  Take out
+                </button>
+              ) : null}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

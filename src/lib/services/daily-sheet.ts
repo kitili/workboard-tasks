@@ -73,6 +73,7 @@ export async function submitDailyFive(userId: string, slots: DailySlotInput[]) {
         status: "TODO",
         priority: slot.priority,
         source: "DAILY",
+        departmentSlug: user.departmentSlug,
         columnOrder: index,
       },
     });
@@ -159,6 +160,7 @@ export async function getTodaySheet(organizationId?: string) {
         id: person.id,
         name: person.name ?? person.phone,
         phone: person.phone,
+        departmentSlug: person.departmentSlug,
         submitted: !!plan && plan.items.length > 0,
         slots: plan
           ? plan.items.map((item) => ({
@@ -172,6 +174,150 @@ export async function getTodaySheet(organizationId?: string) {
       };
     }),
   };
+}
+
+export async function getPickableTodayTasks(userId: string) {
+  const user = await db.user.findUnique({ where: { id: userId }, select: { organizationId: true } });
+  if (!user) return [];
+  const rows = await db.task.findMany({
+    where: {
+      organizationId: user.organizationId,
+      status: { notIn: ["CANCELLED", "COMPLETED"] },
+      OR: [{ assigneeId: userId }, { sharedWithIds: { has: userId } }, { moveOwnerId: userId }],
+    },
+    select: { id: true, title: true, status: true, labels: true, dailyItem: { select: { id: true } } },
+    orderBy: { updatedAt: "desc" },
+    take: 80,
+  });
+  return rows
+    .filter((row) => !row.dailyItem)
+    .map((row) => ({
+      id: row.id,
+      title: row.title,
+      status: row.status,
+      tap: row.labels.includes("TAP"),
+    }));
+}
+
+export async function deleteTodaySlot(userId: string, slot: number) {
+  const planDate = startOfDay(new Date());
+  const plan = await db.dailyPlan.findUnique({
+    where: { userId_planDate: { userId, planDate } },
+    include: { items: true },
+  });
+  const item = plan?.items.find((row) => row.slot === slot);
+  if (!item) return;
+  if (item.taskId) {
+    const task = await db.task.findUnique({ where: { id: item.taskId }, select: { source: true } });
+    if (task?.source === "DAILY") {
+      await db.task.delete({ where: { id: item.taskId } }).catch(() => undefined);
+    }
+  }
+  await db.dailyPlanItem.delete({ where: { id: item.id } });
+  if (slot === 4 || slot === 5) {
+    await db.progressUpdate.deleteMany({
+      where: { authorId: userId, planDate, kind: slot === 4 ? "CHALLENGE" : "PROGRESS" },
+    });
+  }
+}
+
+export async function saveTodaySlots(
+  userId: string,
+  slots: Array<{ slot?: number; title: string; priority?: TaskPriority | null; taskId?: string | null }>,
+) {
+  const filled = slots.filter((slot) => slot.title.trim());
+  if (filled.length === 0) throw new Error("Fill in at least one open line.");
+
+  const user = await db.user.findUnique({ where: { id: userId } });
+  if (!user) throw new Error("Log in first");
+
+  const planDate = startOfDay(new Date());
+  const plan = await db.dailyPlan.upsert({
+    where: { userId_planDate: { userId, planDate } },
+    create: { userId, planDate },
+    update: { submittedAt: new Date() },
+  });
+  const existing = await db.dailyPlanItem.findMany({
+    where: { dailyPlanId: plan.id, slot: { lte: 5 } },
+    include: { task: true },
+  });
+
+  for (const slot of filled) {
+    const title = slot.title.trim();
+    const line = slot.slot && slot.slot >= 1 && slot.slot <= 5 ? slot.slot : undefined;
+    if (!line) {
+      await addTodayTask(userId, { title, priority: slot.priority ?? null });
+      continue;
+    }
+    const current = existing.find((item) => item.slot === line);
+    if (current) {
+      let nextTaskId = current.taskId;
+      if (slot.taskId && slot.taskId !== current.taskId) {
+        const picked = await db.task.findFirst({
+          where: {
+            id: slot.taskId,
+            OR: [{ assigneeId: userId }, { sharedWithIds: { has: userId } }, { moveOwnerId: userId }],
+          },
+        });
+        if (picked) {
+          if (current.taskId && current.task?.source === "DAILY") {
+            await db.task.delete({ where: { id: current.taskId } }).catch(() => undefined);
+          }
+          nextTaskId = picked.id;
+        }
+      }
+      await db.dailyPlanItem.update({
+        where: { id: current.id },
+        data: { title, taskId: nextTaskId },
+      });
+      if (nextTaskId && !slot.taskId) {
+        await db.task.update({
+          where: { id: nextTaskId },
+          data: { title, priority: slot.priority ?? current.task?.priority ?? null },
+        });
+      }
+      if (line === 4 || line === 5) {
+        const kind = line === 4 ? "CHALLENGE" : "PROGRESS";
+        const note = await db.progressUpdate.findFirst({
+          where: { authorId: userId, planDate, kind },
+          orderBy: { createdAt: "desc" },
+        });
+        if (note) await db.progressUpdate.update({ where: { id: note.id }, data: { body: title } });
+        else {
+          await db.progressUpdate.create({
+            data: { organizationId: user.organizationId, authorId: userId, body: title, planDate, kind },
+          });
+        }
+      }
+      continue;
+    }
+    if (slot.taskId) {
+      const picked = await db.task.findFirst({
+        where: {
+          id: slot.taskId,
+          OR: [{ assigneeId: userId }, { sharedWithIds: { has: userId } }, { moveOwnerId: userId }],
+        },
+      });
+      if (picked) {
+        await db.dailyPlanItem.create({
+          data: { dailyPlanId: plan.id, slot: line, title: picked.title, status: picked.status, taskId: picked.id },
+        });
+        continue;
+      }
+    }
+    await addTodayTask(userId, { title, priority: slot.priority ?? null, slot: line });
+  }
+
+  const kept = new Set(filled.map((slot) => slot.slot).filter((slot): slot is number => typeof slot === "number"));
+  const extras = existing.filter((item) => !kept.has(item.slot));
+  for (const item of extras) {
+    if (item.taskId && item.task?.source === "DAILY") {
+      await db.task.delete({ where: { id: item.taskId } }).catch(() => undefined);
+    }
+    await db.dailyPlanItem.delete({ where: { id: item.id } });
+  }
+
+  return getTodaySheet(user.organizationId);
 }
 
 export async function addTodayTask(
@@ -243,6 +389,7 @@ export async function addTodayTask(
       status,
       priority: input.priority,
       source: "DAILY",
+      departmentSlug: user.departmentSlug,
       columnOrder: slot,
       completedAt: status === "COMPLETED" ? new Date() : null,
     },

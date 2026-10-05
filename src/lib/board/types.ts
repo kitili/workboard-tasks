@@ -7,6 +7,7 @@ export type BoardTask = {
   type: string;
   priority: string | null;
   labels: string[];
+  departmentSlug: string | null;
   storyPoints: number | null;
   columnOrder: number;
   dueDate: string | null;
@@ -24,11 +25,20 @@ export type BoardUser = {
   name: string | null;
   username?: string | null;
   phone: string;
+  departmentSlug?: string | null;
 };
 
 export type MissingDailyPerson = {
   id: string;
   name: string;
+  departmentName?: string | null;
+};
+
+export type FiledTodayPerson = {
+  id: string;
+  name: string;
+  departmentName?: string | null;
+  titles: string[];
 };
 
 export type BoardProject = {

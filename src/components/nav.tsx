@@ -4,13 +4,15 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const staffLinks = [{ href: "/today", label: "1-5's" }];
-
-const adminLinks = [
-  { href: "/today", label: "1-5's" },
-  { href: "/board", label: "Admin board" },
-  { href: "/updates", label: "Updates" },
-];
+function linksFor({ admin }: { admin: boolean; departmentName?: string | null }) {
+  const links = [{ href: "/today", label: "1-5's" }];
+  if (admin) {
+    links.push({ href: "/board", label: "Admin board" }, { href: "/kpi", label: "KPI" }, { href: "/updates", label: "Updates" });
+  } else {
+    links.push({ href: "/board", label: "My board" }, { href: "/updates", label: "My updates" });
+  }
+  return links;
+}
 
 type SessionUser = {
   name: string | null;
@@ -22,14 +24,16 @@ export function Nav({
   user,
   unreadUpdates = 0,
   admin = false,
+  departmentName = null,
 }: {
   user: SessionUser;
   unreadUpdates?: number;
   admin?: boolean;
+  departmentName?: string | null;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const links = admin ? adminLinks : staffLinks;
+  const links = linksFor({ admin, departmentName });
 
   useEffect(() => {
     setOpen(false);

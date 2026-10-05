@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { getSessionUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { allocateTaskKey } from "@/lib/board/task-key";
 
@@ -20,6 +21,8 @@ const createSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await getSessionUser();
+    if (!session) return NextResponse.json({ error: "Log in first" }, { status: 401 });
     const body = createSchema.parse(await request.json());
 
     const project = await db.project.findUnique({
@@ -49,6 +52,7 @@ export async function POST(request: NextRequest) {
         priority: body.priority ?? "MEDIUM",
         assigneeId: body.assigneeId,
         labels: body.labels ?? [],
+        departmentSlug: session.departmentSlug,
         storyPoints: body.storyPoints,
         dueDate: body.dueDate ? new Date(body.dueDate) : null,
         columnOrder: (maxOrder._max.columnOrder ?? -1) + 1,

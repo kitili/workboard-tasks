@@ -34,14 +34,17 @@ export default async function UpdatesPage({
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
-  if (!isUpdatesAdmin(user)) redirect("/today");
+  const admin = isUpdatesAdmin(user);
 
   const params = await searchParams;
-  const query = params.q?.trim() ?? "";
+  const query = admin ? params.q?.trim() ?? "" : "";
   const fromValue = params.from && params.from >= "2026-09-01" ? params.from : "2026-09-01";
   const toValue = params.to && params.to >= "2026-09-01" ? params.to : "";
   const historyKind = params.hk === "PROGRESS" || params.hk === "CHALLENGE" ? params.hk : "all";
-  const peopleFilter = query ? { query } : {};
+  const peopleFilter = {
+    authorId: admin ? undefined : user.id,
+    ...(query ? { query } : {}),
+  };
   const [today, history] = await Promise.all([
     listPeopleNotes(user.organizationId, user.id, pageNumber(params.page), null, {
       ...peopleFilter,
@@ -71,20 +74,28 @@ export default async function UpdatesPage({
     <div className="mx-auto max-w-3xl space-y-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-[#002368]">Team</p>
-          <h2 className="mt-1 text-2xl font-semibold">Updates</h2>
+          <p className="text-xs font-semibold uppercase tracking-widest text-[#002368]">{admin ? "Team" : "Mine"}</p>
+          <h2 className="mt-1 text-2xl font-semibold">{admin ? "Updates" : "My updates"}</h2>
           <p className="mt-1 max-w-xl text-sm text-zinc-600">
-            Names only, until you open one. Today shows that person’s progress and challenge together. Earlier days are under History.
+            {admin
+              ? "Names only, until you open one. Today shows that person’s progress and challenge together. Earlier days are under History."
+              : "Only your progress and challenges from 1–5’s. Other people’s updates stay private."}
           </p>
         </div>
-        <UpdatesFilter query={query} from={fromValue === "2026-09-01" ? undefined : fromValue} to={toValue || undefined} kind={historyKind} />
+        {admin ? (
+          <UpdatesFilter query={query} from={fromValue === "2026-09-01" ? undefined : fromValue} to={toValue || undefined} kind={historyKind} />
+        ) : null}
       </div>
 
       <section className="space-y-3">
         <h3 className="text-lg font-semibold text-[#002368]">Today</h3>
         <PersonNotes
           people={today.people}
-          empty="No one has written today yet. Progress and challenges from 1–5’s show up here, one name at a time."
+          empty={
+            admin
+              ? "No one has written today yet. Progress and challenges from 1–5’s show up here, one name at a time."
+              : "You have not added today’s progress or challenge yet."
+          }
         />
         <Pager page={today.page} pages={today.pages} basePath="/updates" param="page" keep={keep} />
       </section>
@@ -93,14 +104,18 @@ export default async function UpdatesPage({
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h3 className="text-lg font-semibold text-[#002368]">History</h3>
-            <p className="text-sm text-[#4f555f]">Earlier days, grouped by name. Open a name to read them.</p>
+            <p className="text-sm text-[#4f555f]">
+              {admin ? "Earlier days, grouped by name. Open a name to read them." : "Your earlier progress and challenges."}
+            </p>
           </div>
-          <a
-            href={`/api/updates/export?${exportQuery.toString()}`}
-            className="rounded-xl border border-[#002368] px-4 py-2 text-sm font-medium text-[#002368]"
-          >
-            Export
-          </a>
+          {admin ? (
+            <a
+              href={`/api/updates/export?${exportQuery.toString()}`}
+              className="rounded-xl border border-[#002368] px-4 py-2 text-sm font-medium text-[#002368]"
+            >
+              Export
+            </a>
+          ) : null}
         </div>
 
         <form method="get" action="/updates" className="flex flex-wrap items-end gap-2">
@@ -142,7 +157,10 @@ export default async function UpdatesPage({
           </button>
         </form>
 
-        <PersonNotes people={history.people} empty="Nothing in this range yet. Notes from before today show up here by name." />
+        <PersonNotes
+          people={history.people}
+          empty={admin ? "Nothing in this range yet. Notes from before today show up here by name." : "No earlier updates of yours in this range."}
+        />
         <Pager
           page={history.page}
           pages={history.pages}

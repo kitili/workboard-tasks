@@ -9,7 +9,11 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Log in first" }, { status: 401 });
   if (!org) return NextResponse.json({ error: "No organization" }, { status: 404 });
 
-  const data = await getOrganizationBoard(org.id, isBoardAdmin(session) ? undefined : session.id);
+  const admin = isBoardAdmin(session);
+  const data = await getOrganizationBoard(org.id, {
+    assigneeId: admin || session.departmentSlug ? undefined : session.id,
+    departmentSlug: admin ? undefined : session.departmentSlug,
+  });
   if (!data) return NextResponse.json({ error: "No organization" }, { status: 404 });
 
   return NextResponse.json(data);

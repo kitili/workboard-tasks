@@ -15,8 +15,12 @@ import {
 } from "@dnd-kit/core";
 import { canMoveTask, cardOwnerId } from "@/lib/board/access";
 import { BOARD_COLUMNS, PRIORITY_LABELS, columnForStatus } from "@/lib/board/columns";
+import { DEPARTMENTS } from "@/lib/departments";
+import { AddDepartmentPerson } from "@/components/board/add-department-person";
+import { FiledTodayList } from "@/components/board/filed-today-list";
 import { MissingDailyList } from "@/components/board/missing-daily-list";
-import type { BoardTask, BoardUser, MissingDailyPerson } from "@/lib/board/types";
+import { TapRoster } from "@/components/board/tap-roster";
+import type { BoardTask, BoardUser, FiledTodayPerson, MissingDailyPerson } from "@/lib/board/types";
 import { BoardColumn } from "@/components/board/board-column";
 
 type KanbanBoardProps = {
@@ -25,7 +29,14 @@ type KanbanBoardProps = {
   currentUserId: string | null;
   mine?: boolean;
   admin?: boolean;
+  departmentName?: string | null;
+  departmentSlug?: string | null;
   missingDaily?: MissingDailyPerson[];
+  filedToday?: FiledTodayPerson[];
+  tapTitle?: string | null;
+  tapPeople?: Array<{ name: string; role: string }>;
+  tapDepartments?: Array<{ name: string; tap?: string; people: Array<{ name: string; role: string }> }>;
+  assignUsers?: BoardUser[];
 };
 
 const collisionDetection: CollisionDetection = (args) => {
@@ -50,7 +61,14 @@ export function KanbanBoard({
   currentUserId,
   mine = false,
   admin = false,
+  departmentName = null,
+  departmentSlug = null,
   missingDaily = [],
+  filedToday = [],
+  tapTitle = null,
+  tapPeople = [],
+  tapDepartments = [],
+  assignUsers,
 }: KanbanBoardProps) {
   const [tasks, setTasks] = useState(initialTasks);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -123,16 +141,23 @@ export function KanbanBoard({
 
   async function changeTask(
     taskId: string,
-    patch: { priority?: string | null; shareWith?: string; handoverTo?: string },
+    patch: { title?: string; priority?: string | null; shareWith?: string; handoverTo?: string; assigneeId?: string | null },
   ) {
     setNotice("");
-    const personId = patch.handoverTo ?? patch.shareWith;
+    const directory = assignUsers?.length ? assignUsers : users;
+    const personId = patch.handoverTo ?? patch.shareWith ?? patch.assigneeId;
     setTasks((prev) =>
       prev.map((task) => {
         if (task.id !== taskId) return task;
-        const assignee = personId ? (users.find((user) => user.id === personId) ?? task.assignee) : task.assignee;
+        const assignee =
+          patch.assigneeId === null
+            ? null
+            : personId
+              ? (directory.find((user) => user.id === personId) ?? task.assignee)
+              : task.assignee;
         return {
           ...task,
+          title: patch.title ?? task.title,
           priority: patch.priority === undefined ? task.priority : patch.priority,
           assignee,
           sharedWithIds: patch.handoverTo
@@ -140,7 +165,7 @@ export function KanbanBoard({
             : patch.shareWith
               ? Array.from(new Set([...task.sharedWithIds, patch.shareWith]))
               : task.sharedWithIds,
-          moveOwnerId: patch.handoverTo ?? task.moveOwnerId ?? cardOwnerId(task),
+          moveOwnerId: patch.handoverTo ?? (patch.assigneeId !== undefined ? patch.assigneeId : task.moveOwnerId ?? cardOwnerId(task)),
         };
       }),
     );
@@ -159,38 +184,84 @@ export function KanbanBoard({
 
   return (
     <>
+      {(tapPeople.length > 0 || tapDepartments.length > 0) && !mine ? (
+        <TapRoster
+          title={tapTitle ?? "TAP"}
+          people={tapPeople}
+          groups={tapDepartments}
+          extra={
+            admin ? (
+              <AddDepartmentPerson departmentSlug={departmentSlug} departmentName={departmentName} />
+            ) : null
+          }
+        />
+      ) : null}
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold">
-            {admin && !mine ? "Admin board" : personFilter !== "all" && personFilter === currentUserId ? "My board" : "Silverleaf Tasks"}
+            {admin && !mine
+              ? "Admin board"
+              : mine
+                ? "My board"
+                : departmentName
+                  ? `${departmentName} board`
+                  : "Silverleaf Tasks"}
           </h2>
           <p className="mt-1 text-sm text-zinc-500">
             {admin && !mine
-              ? "Everyone’s 1–5 cards. You can move a card or hand ownership to someone else."
-              : "Only your cards. Done stays visible for today, then clears tomorrow. 1–5 history keeps it as Done."}
+              ? "Pick a TAP, or look at all of them. Each block names the TAP it came from."
+              : mine
+                ? "Only your cards. Done stays visible for today, then clears tomorrow. 1–5 history keeps it as Done."
+                : `${departmentName ?? "This department"} only. Other departments stay private.`}
           </p>
         </div>
         {admin && !mine ? (
-          <label className="text-sm">
-            <span className="mr-2 text-zinc-500">Show</span>
-            <select
-              value={personFilter}
-              onChange={(e) => setPersonFilter(e.target.value)}
-              className="rounded-lg border border-zinc-300 bg-white px-3 py-2"
-            >
-              <option value="all">Everyone</option>
-              {people.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.name ?? user.username ?? user.phone}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="text-sm">
+              <span className="mr-2 text-zinc-500">Department</span>
+              <select
+                value={departmentSlug ?? "all"}
+                onChange={(e) => {
+                  const url = new URL(window.location.href);
+                  if (e.target.value === "all") url.searchParams.delete("dept");
+                  else url.searchParams.set("dept", e.target.value);
+                  window.location.href = url.toString();
+                }}
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-2"
+              >
+                <option value="all">All TAPs</option>
+                {DEPARTMENTS.map((item) => (
+                  <option key={item.slug} value={item.slug}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm">
+              <span className="mr-2 text-zinc-500">Show</span>
+              <select
+                value={personFilter}
+                onChange={(e) => setPersonFilter(e.target.value)}
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-2"
+              >
+                <option value="all">Everyone</option>
+                {people.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.name ?? user.username ?? user.phone}
+                    {user.departmentSlug && !departmentSlug
+                      ? ` · ${DEPARTMENTS.find((item) => item.slug === user.departmentSlug)?.name ?? user.departmentSlug}`
+                      : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         ) : null}
       </div>
 
       {notice ? <p className="mb-4 text-sm text-[#002368]">{notice}</p> : null}
-      {admin && !mine ? <MissingDailyList people={missingDaily} /> : null}
+      {admin && !mine ? <FiledTodayList people={filedToday} departmentName={departmentName} /> : null}
+      {admin && !mine ? <MissingDailyList people={missingDaily} departmentName={departmentName} /> : null}
 
       <DndContext
         sensors={sensors}
@@ -205,11 +276,13 @@ export function KanbanBoard({
               column={column}
               tasks={columns[column.id] ?? []}
               users={people}
+              assignUsers={assignUsers ?? people}
               forceOpen={false}
               openGroups={openGroups}
               onToggleGroup={(key) => setOpenGroups((prev) => ({ ...prev, [key]: !prev[key] }))}
               currentUserId={currentUserId}
               admin={admin}
+              viewerDept={departmentSlug}
               onChangeTask={(id, patch) => void changeTask(id, patch)}
             />
           ))}
