@@ -61,3 +61,40 @@ export function MiniBars({
     </div>
   );
 }
+
+export function StatusPie({
+  slices,
+}: {
+  slices: Array<{ label: string; value: number; color: string }>;
+}) {
+  const total = slices.reduce((sum, slice) => sum + slice.value, 0) || 1;
+  let cursor = 0;
+  const stops = slices
+    .map((slice) => {
+      const start = (cursor / total) * 360;
+      cursor += slice.value;
+      const end = (cursor / total) * 360;
+      return `${slice.color} ${start}deg ${end}deg`;
+    })
+    .join(", ");
+
+  return (
+    <div className="flex flex-col items-center gap-4 sm:flex-row">
+      <div
+        className="h-40 w-40 shrink-0 rounded-full"
+        style={{ background: `conic-gradient(${stops})` }}
+        aria-hidden
+      />
+      <ul className="space-y-2 text-sm text-[#14233B]">
+        {slices.map((slice) => (
+          <li key={slice.label} className="flex items-center gap-2">
+            <span className="h-3 w-3 rounded-full" style={{ background: slice.color }} />
+            <span>
+              {slice.label} · {slice.value} ({Math.round((slice.value / total) * 100)}%)
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}

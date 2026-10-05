@@ -184,14 +184,34 @@ export function itemsForTapPerson(person: DepartmentPerson, slug = inferDepartme
   return dept.items.filter((item) => itemPeople(item).some((owner) => personMatchesTapOwner(person, owner)));
 }
 
-export function suggestionsForTapPerson(person: DepartmentPerson): TapSuggestion[] {
+export function pickOpenTapItems(
+  items: TapItem[],
+  opts?: { skipTitles?: string[]; keepTitles?: string[]; limit?: number },
+) {
+  const limit = opts?.limit ?? 3;
+  const skip = new Set((opts?.skipTitles ?? []).map((title) => title.toLowerCase().replace(/\s+/g, " ").trim()));
+  const keepWanted = new Set((opts?.keepTitles ?? []).map((title) => title.toLowerCase().replace(/\s+/g, " ").trim()));
+  const titled = items
+    .filter((item) => isOpenTapStatus(item.status))
+    .map((item) => ({ item, title: `${item.code} ${item.title}` }));
+  const keep = titled.filter((row) => keepWanted.has(row.title.toLowerCase().replace(/\s+/g, " ").trim()));
+  const rest = titled.filter((row) => {
+    const key = row.title.toLowerCase().replace(/\s+/g, " ").trim();
+    return !keep.some((held) => held.item.code === row.item.code) && !skip.has(key);
+  });
+  const rocks = rest.filter((row) => /\.0$/.test(row.item.code) || /-\d+\.0$/.test(row.item.code));
+  const others = rest.filter((row) => !rocks.includes(row));
+  return [...keep, ...rocks, ...others].slice(0, limit).map((row) => row.item);
+}
+
+export function suggestionsForTapPerson(
+  person: DepartmentPerson,
+  opts?: { skipTitles?: string[]; keepTitles?: string[] },
+): TapSuggestion[] {
   const slug = inferDepartment(person);
   const dept = tapDepartment(slug);
   if (!dept) return [];
-  const mine = itemsForTapPerson(person, slug).filter((item) => isOpenTapStatus(item.status));
-  const rocks = mine.filter((item) => /\.0$/.test(item.code) || /-\d+\.0$/.test(item.code));
-  const lines = rocks.length >= 3 ? rocks : [...rocks, ...mine.filter((item) => !rocks.includes(item))];
-  const picked = lines.slice(0, 3);
+  const picked = pickOpenTapItems(itemsForTapPerson(person, slug), { ...opts, limit: 3 });
   if (picked.length === 0) return [];
   const label = departmentBySlug(slug)?.name ?? dept.name;
   return [

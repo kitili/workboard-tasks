@@ -3,7 +3,8 @@ import { isBoardAdmin } from "@/lib/auth/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { getDefaultOrganization } from "@/lib/data/dashboard";
 import { getKpiDashboard } from "@/lib/services/kpi";
-import { Donut, MiniBars } from "@/components/kpi/charts";
+import { Donut, MiniBars, StatusPie } from "@/components/kpi/charts";
+import { DeptScoreboard } from "@/components/kpi/scoreboard";
 import { PagedNames } from "@/components/kpi/paged-names";
 
 export const dynamic = "force-dynamic";
@@ -52,23 +53,38 @@ export default async function KpiPage() {
         </section>
       ) : null}
 
-      <section className="grid gap-4 lg:grid-cols-[220px_1fr]">
+      <section className="grid gap-4 lg:grid-cols-[1fr_1fr]">
         <article className="rounded-3xl bg-white px-5 py-4 shadow-sm ring-1 ring-[#002368]/10">
-          <h3 className="text-sm font-semibold text-[#002368]">All TAP</h3>
-          <Donut value={kpi.overall.tapPct} label={`${kpi.overall.tapDone} finished · ${kpi.overall.tapLines - kpi.overall.tapDone} still open`} />
-        </article>
-        <article className="rounded-3xl bg-white px-5 py-4 shadow-sm ring-1 ring-[#002368]/10">
-          <h3 className="text-sm font-semibold text-[#002368]">Done vs open by TAP</h3>
-          <p className="mb-3 text-xs text-[#4f555f]">Navy is done. Gold is still open.</p>
-          <MiniBars
-            rows={kpi.tapDepts.map((dept) => ({
-              label: dept.name,
-              done: dept.done,
-              undone: dept.undone,
-            }))}
+          <h3 className="text-sm font-semibold text-[#002368]">All TAP mix</h3>
+          <p className="mb-3 text-xs text-[#4f555f]">Where every OPSP TAP line sits right now.</p>
+          <StatusPie
+            slices={[
+              { label: "Done", value: kpi.overall.tapDone, color: "#002368" },
+              { label: "On track", value: kpi.overall.onTrack, color: "#80BFEC" },
+              { label: "Behind", value: kpi.overall.behind, color: "#FFC952" },
+              { label: "Not started", value: kpi.overall.notStarted, color: "#C4B5FD" },
+            ]}
           />
         </article>
+        <article className="rounded-3xl bg-white px-5 py-4 shadow-sm ring-1 ring-[#002368]/10">
+          <h3 className="text-sm font-semibold text-[#002368]">Done share</h3>
+          <Donut value={kpi.overall.tapPct} label={`${kpi.overall.tapDone} finished · ${kpi.overall.tapLines - kpi.overall.tapDone} still open`} />
+          <div className="mt-4">
+            <p className="mb-2 text-xs text-[#4f555f]">Navy is done. Gold is still open.</p>
+            <MiniBars
+              rows={[...kpi.tapDepts]
+                .sort((a, b) => b.pctDone - a.pctDone)
+                .map((dept) => ({
+                  label: dept.name,
+                  done: dept.done,
+                  undone: dept.undone,
+                }))}
+            />
+          </div>
+        </article>
       </section>
+
+      <DeptScoreboard rows={kpi.tapDepts} />
 
       <section className="grid gap-4 md:grid-cols-3">
         <PagedNames title="No 1–5 today" people={kpi.missingToday} empty="Everyone filed." />

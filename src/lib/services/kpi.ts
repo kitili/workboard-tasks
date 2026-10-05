@@ -15,6 +15,9 @@ export async function getKpiDashboard(organizationId: string) {
     const done = items.filter((item) => DONE.has(item.status)).length;
     const behind = items.filter((item) => item.status === "Behind Schedule").length;
     const notStarted = items.filter((item) => item.status === "Not Started").length;
+    const onTrack = items.filter((item) =>
+      item.status === "On Schedule" || item.status === "Ongoing" || item.status === "Partially Completed",
+    ).length;
     const open = items.filter((item) => isOpenTapStatus(item.status)).length;
     const lagging = items
       .filter((item) => item.status === "Behind Schedule" || (item.status === "Not Started" && /\.0$/.test(item.code)))
@@ -34,6 +37,7 @@ export async function getKpiDashboard(organizationId: string) {
       undone: items.length - done,
       behind,
       notStarted,
+      onTrack,
       pctDone: items.length ? Math.round((done / items.length) * 100) : 0,
       pctUndone: items.length ? Math.round(((items.length - done) / items.length) * 100) : 0,
       lagging,
@@ -88,8 +92,14 @@ export async function getKpiDashboard(organizationId: string) {
   }
 
   const overall = tapDepts.reduce(
-    (sum, dept) => ({ total: sum.total + dept.total, done: sum.done + dept.done, behind: sum.behind + dept.behind }),
-    { total: 0, done: 0, behind: 0 },
+    (sum, dept) => ({
+      total: sum.total + dept.total,
+      done: sum.done + dept.done,
+      behind: sum.behind + dept.behind,
+      onTrack: sum.onTrack + dept.onTrack,
+      notStarted: sum.notStarted + dept.notStarted,
+    }),
+    { total: 0, done: 0, behind: 0, onTrack: 0, notStarted: 0 },
   );
 
   const alerts = [
@@ -111,6 +121,8 @@ export async function getKpiDashboard(organizationId: string) {
       tapDone: overall.done,
       tapPct: overall.total ? Math.round((overall.done / overall.total) * 100) : 0,
       behind: overall.behind,
+      onTrack: overall.onTrack,
+      notStarted: overall.notStarted,
       filedToday: filedToday.length,
       expected: staff.length,
       missingToday: missingToday.length,

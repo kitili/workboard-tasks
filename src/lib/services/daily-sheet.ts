@@ -1,8 +1,10 @@
-import { format, startOfDay, startOfWeek } from "date-fns";
+import { format, startOfDay, startOfWeek, subDays } from "date-fns";
 import type { TaskPriority, TaskStatus } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { allocateTaskKey } from "@/lib/board/task-key";
+import { itemsForTapPerson, pickOpenTapItems, tapDepartment } from "@/lib/data/tap-catalog";
 import { getEnv } from "@/lib/env";
+import { pickDailyTapLineup, type TodayTapChip } from "@/lib/today/tap-lineup";
 
 export type DailySlotInput = {
   title: string;
@@ -176,6 +178,12 @@ export async function getTodaySheet(organizationId?: string) {
   };
 }
 
+const TAP_STATUS_RANK: Record<string, number> = {
+  IN_PROGRESS: 0,
+  TODO: 1,
+  BACKLOG: 2,
+};
+
 export async function getPickableTodayTasks(userId: string) {
   const user = await db.user.findUnique({ where: { id: userId }, select: { organizationId: true } });
   if (!user) return [];
@@ -197,6 +205,98 @@ export async function getPickableTodayTasks(userId: string) {
       status: row.status,
       tap: row.labels.includes("TAP"),
     }));
+}
+
+export async function getTodayTapLineup(userId: string): Promise<{ lineup: TodayTapChip[]; more: TodayTapChip[] }> {
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      name: true,
+      username: true,
+      email: true,
+      jobTitle: true,
+      departmentSlug: true,
+      organizationId: true,
+    },
+  });
+  if (!user) return { lineup: [], more: [] };
+
+  const today = startOfDay(new Date());
+  const yesterday = subDays(today, 1);
+  const [openTaps, doneTaps, yesterdayPlan] = await Promise.all([
+    db.task.findMany({
+      where: {
+        organizationId: user.organizationId,
+        labels: { has: "TAP" },
+        status: { notIn: ["CANCELLED", "COMPLETED"] },
+        OR: [{ assigneeId: userId }, { sharedWithIds: { has: userId } }, { moveOwnerId: userId }],
+      },
+      select: { id: true, title: true, status: true, labels: true, description: true, columnOrder: true },
+    }),
+    db.task.findMany({
+      where: {
+        organizationId: user.organizationId,
+        labels: { has: "TAP" },
+        status: "COMPLETED",
+        OR: [{ assigneeId: userId }, { sharedWithIds: { has: userId } }, { moveOwnerId: userId }],
+      },
+      select: { title: true },
+    }),
+    db.dailyPlan.findUnique({
+      where: { userId_planDate: { userId, planDate: yesterday } },
+      include: { items: { where: { slot: { lte: 3 } }, include: { task: { select: { id: true, title: true, status: true, labels: true } } } } },
+    }),
+  ]);
+
+  const yesterdaySlots = (yesterdayPlan?.items ?? []).map((item) => ({
+    taskId: item.taskId,
+    title: item.title,
+    done: item.task?.status === "COMPLETED",
+  }));
+  const doneTitles = new Set([
+    ...doneTaps.map((task) => task.title.toLowerCase().replace(/\s+/g, " ").trim()),
+    ...yesterdaySlots.filter((item) => item.done).map((item) => item.title.toLowerCase().replace(/\s+/g, " ").trim()),
+  ]);
+
+  const boardChips: TodayTapChip[] = [...openTaps]
+    .sort((a, b) => {
+      const rock = (task: (typeof openTaps)[number]) =>
+        task.labels.some((label) => /\.0$/.test(label.replace(/^Rock\s+/i, "")));
+      return (
+        Number(rock(b)) - Number(rock(a)) ||
+        (TAP_STATUS_RANK[a.status] ?? 9) - (TAP_STATUS_RANK[b.status] ?? 9) ||
+        a.columnOrder - b.columnOrder
+      );
+    })
+    .map((task) => ({
+      id: task.id,
+      title: task.title,
+      source: task.description?.split(" · ")[0] ?? "TAP",
+      status: task.status,
+    }));
+
+  const seen = new Set(boardChips.map((chip) => chip.title.toLowerCase().replace(/\s+/g, " ").trim()));
+  const dept = tapDepartment(user.departmentSlug);
+  const catalog = pickOpenTapItems(itemsForTapPerson(user), {
+    skipTitles: [...doneTitles, ...seen],
+    keepTitles: yesterdaySlots.filter((item) => !item.done).map((item) => item.title),
+    limit: 12,
+  });
+  const catalogChips: TodayTapChip[] = catalog
+    .map((item) => ({
+      id: `catalog:${user.departmentSlug ?? "tap"}:${item.code}`,
+      title: `${item.code} ${item.title}`,
+      source: dept?.tap ?? "TAP",
+      status: item.status,
+    }))
+    .filter((chip) => !seen.has(chip.title.toLowerCase().replace(/\s+/g, " ").trim()));
+
+  const pool = [...boardChips, ...catalogChips];
+  const keepYesterday = yesterdaySlots.filter((item) => !item.done);
+  const lineup = pickDailyTapLineup(pool, keepYesterday, 3);
+  const more = pool.filter((chip) => !lineup.some((item) => item.id === chip.id)).slice(0, 8);
+  return { lineup, more };
 }
 
 export async function deleteTodaySlot(userId: string, slot: number) {

@@ -1,8 +1,9 @@
 import "dotenv/config";
 import { db } from "../src/lib/db";
 import { inferDepartment } from "../src/lib/departments";
-import { TAP_DEPARTMENTS, tapDepartment, tapPeople } from "../src/lib/data/tap-catalog";
+import { pickOpenTapItems, TAP_DEPARTMENTS, tapDepartment, tapPeople } from "../src/lib/data/tap-catalog";
 import { getKpiDashboard } from "../src/lib/services/kpi";
+import { pickDailyTapLineup } from "../src/lib/today/tap-lineup";
 import { syncTapTasks } from "../src/lib/services/tap-sync";
 import { noonHasPassed, selectDepartmentStaff, selectMissingDaily } from "../src/lib/board/missing-daily";
 import { syncAllUserDepartments } from "../src/lib/services/departments";
@@ -114,7 +115,40 @@ async function main() {
     "KPI done+undone is 100% per dept",
   );
   check(typeof kpi.overall.tapPct === "number", "KPI overall TAP percent is a number");
+  check(kpi.tapDepts.every((dept) => typeof dept.onTrack === "number"), "KPI scoreboard has on-track counts");
+  check(typeof kpi.overall.onTrack === "number", "KPI overall mix includes on-track");
+
+  const first = pickDailyTapLineup(
+    [
+      { id: "a", title: "1.0 First" },
+      { id: "b", title: "2.0 Second" },
+      { id: "c", title: "3.0 Third" },
+      { id: "d", title: "4.0 Fourth" },
+    ],
+    [{ taskId: "a", title: "1.0 First" }, { taskId: "b", title: "2.0 Second" }],
+    3,
+  );
+  check(first.map((item) => item.id).join() === "a,b,c", "still-open TAP lines stay in today’s lineup");
+  const rotated = pickDailyTapLineup(
+    [
+      { id: "b", title: "2.0 Second" },
+      { id: "c", title: "3.0 Third" },
+      { id: "d", title: "4.0 Fourth" },
+    ],
+    [{ taskId: "a", title: "1.0 First" }, { taskId: "b", title: "2.0 Second" }],
+    3,
+  );
+  check(rotated.map((item) => item.id).join() === "b,c,d", "done TAP lines are replaced by the next open ones");
   const eceTap = tapDepartment("ece");
+  const eceSix = eceTap?.items.find((item) => item.code === "6.0");
+  const eceOpen = pickOpenTapItems(eceTap?.items ?? [], {
+    skipTitles: eceSix ? [`${eceSix.code} ${eceSix.title}`] : [],
+    limit: 3,
+  });
+  check(
+    eceOpen.length > 0 && !eceOpen.some((item) => item.code === "6.0"),
+    "catalog picks skip TAP lines that already moved on",
+  );
   check(
     Boolean(eceTap?.items.some((item) => item.owners.includes("Julius") && (item.helpers ?? []).includes("Pascaline"))),
     "ECE 6.0 helpers include Pascaline",
