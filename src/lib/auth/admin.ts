@@ -37,6 +37,11 @@ export function isBoardAdmin(user: AdminPerson | null | undefined) {
   );
 }
 
+export function isOpsLead(user: AdminPerson | null | undefined) {
+  if (!user) return false;
+  return named(user, "baraka", ["majundo"]) || named(user, "majundo");
+}
+
 export function isUpdatesAdmin(user: AdminPerson | null | undefined) {
   return isBoardAdmin(user);
 }

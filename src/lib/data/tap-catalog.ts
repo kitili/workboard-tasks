@@ -20,6 +20,7 @@ export type TapItem = {
   owners: string[];
   helpers?: string[];
   status: TapStatus;
+  deadline?: string | null;
 };
 
 export type TapDepartment = {
@@ -375,4 +376,68 @@ export function tapPeople(slug: string | null | undefined) {
     seen.add(extra.name.toLowerCase());
   }
   return people;
+}
+
+export function isOpsTapOwnerName(name: string) {
+  const text = name.toLowerCase();
+  if (text.includes("operations lead") || text.includes("ops lead")) return true;
+  return tapOwnerKey(name) === "baraka" || text.includes("baraka") || text.includes("majundo");
+}
+
+export function tapItemBelongsOnOpsDesk(deptSlug: string, item: TapItem) {
+  if (deptSlug === "operations") return item.status !== "Removed";
+  return [...item.owners, ...(item.helpers ?? [])].some(isOpsTapOwnerName) && item.status !== "Removed";
+}
+
+function codeParts(code: string) {
+  return code.split(".").map((part) => Number.parseInt(part, 10) || 0);
+}
+
+export function sortTapCodes(a: string, b: string) {
+  const left = codeParts(a);
+  const right = codeParts(b);
+  return left[0] - right[0] || (left[1] ?? 0) - (right[1] ?? 0) || a.localeCompare(b);
+}
+
+export function groupTapRocks(items: TapItem[]) {
+  const sorted = [...items].sort((a, b) => sortTapCodes(a.code, b.code));
+  const rocks: Array<{ parent: TapItem; children: TapItem[] }> = [];
+  const used = new Set<string>();
+  for (const item of sorted.filter((row) => /\.0$/.test(row.code))) {
+    const prefix = item.code.replace(/\.0$/, ".");
+    const children = sorted.filter((row) => row.code !== item.code && row.code.startsWith(prefix));
+    children.forEach((child) => used.add(child.code));
+    used.add(item.code);
+    rocks.push({ parent: item, children });
+  }
+  for (const item of sorted.filter((row) => !used.has(row.code))) {
+    const parentCode = `${item.code.split(".")[0]}.0`;
+    const rock = rocks.find((row) => row.parent.code === parentCode);
+    if (rock) rock.children.push(item);
+    else rocks.push({ parent: item, children: [] });
+  }
+  return rocks;
+}
+
+export function opsTapDeskCatalog() {
+  return TAP_DEPARTMENTS.map((dept) => {
+    const mine = dept.items.filter((item) => tapItemBelongsOnOpsDesk(dept.slug, item));
+    const extras: TapItem[] = [];
+    if (dept.slug !== "operations") {
+      for (const item of mine) {
+        const parentCode = `${item.code.split(".")[0]}.0`;
+        if (mine.some((row) => row.code === parentCode) || extras.some((row) => row.code === parentCode)) continue;
+        const parent = dept.items.find((row) => row.code === parentCode);
+        if (parent) extras.push(parent);
+      }
+    }
+    const items = [...extras, ...mine];
+    return {
+      slug: dept.slug,
+      name: dept.name,
+      tap: dept.tap,
+      items: mine,
+      rocks: groupTapRocks(items),
+    };
+  }).filter((dept) => dept.items.length > 0);
 }

@@ -382,10 +382,26 @@ export async function saveTodaySlots(
         });
         nextTaskId = created.id;
       } else if (nextTaskId === current.taskId) {
-        await db.task.update({
-          where: { id: nextTaskId },
-          data: { title: lineTitle, priority: slot.priority ?? current.task?.priority ?? null },
-        });
+        if (current.task?.labels.includes("TAP")) {
+          if (current.title.trim() !== lineTitle) {
+            const project = await ensureWorkProject(user.organizationId);
+            const created = await createDailyCard({
+              organizationId: user.organizationId,
+              projectId: project.id,
+              userId,
+              departmentSlug: user.departmentSlug,
+              title: lineTitle,
+              slot: line,
+              priority: slot.priority ?? null,
+            });
+            nextTaskId = created.id;
+          }
+        } else {
+          await db.task.update({
+            where: { id: nextTaskId },
+            data: { title: lineTitle, priority: slot.priority ?? current.task?.priority ?? null },
+          });
+        }
       }
       await db.dailyPlanItem.update({
         where: { id: current.id },
@@ -640,4 +656,62 @@ async function attachMissingDailyCards(organizationId: string) {
       data: { taskId: task.id, status: "TODO" },
     });
   }
+}
+
+export async function assignTapToday(userId: string, taskId: string) {
+  const user = await db.user.findUnique({ where: { id: userId } });
+  if (!user) throw new Error("Person not found");
+  const task = await db.task.findUnique({
+    where: { id: taskId },
+    include: { dailyItem: { include: { dailyPlan: true } } },
+  });
+  if (!task) throw new Error("TAP line not found");
+
+  const sharedWithIds = Array.from(new Set([...task.sharedWithIds, task.assigneeId].filter(Boolean) as string[])).filter(
+    (id) => id !== userId,
+  );
+  await db.task.update({
+    where: { id: taskId },
+    data: { assigneeId: userId, moveOwnerId: userId, sharedWithIds },
+  });
+
+  const planDate = startOfDay(new Date());
+  const current = task.dailyItem;
+  const alreadyToday =
+    current &&
+    current.dailyPlan.userId === userId &&
+    current.dailyPlan.planDate.getTime() === planDate.getTime() &&
+    current.slot >= 1 &&
+    current.slot <= 3;
+  if (alreadyToday) {
+    return { parked: true as const, slot: current.slot };
+  }
+
+  if (current) {
+    await db.dailyPlanItem.update({ where: { id: current.id }, data: { taskId: null } });
+  }
+
+  const plan = await db.dailyPlan.upsert({
+    where: { userId_planDate: { userId, planDate } },
+    create: { userId, planDate },
+    update: { submittedAt: new Date() },
+  });
+  const items = await db.dailyPlanItem.findMany({ where: { dailyPlanId: plan.id, slot: { lte: 3 } } });
+  const empty = [1, 2, 3].find((slot) => {
+    const row = items.find((item) => item.slot === slot);
+    return !row || !row.title.trim();
+  });
+  if (!empty) {
+    return { parked: false as const, slot: null as number | null };
+  }
+  const row = items.find((item) => item.slot === empty);
+  const payload = { title: task.title, status: task.status, taskId: task.id };
+  if (row) {
+    await db.dailyPlanItem.update({ where: { id: row.id }, data: payload });
+  } else {
+    await db.dailyPlanItem.create({
+      data: { dailyPlanId: plan.id, slot: empty, ...payload },
+    });
+  }
+  return { parked: true as const, slot: empty };
 }

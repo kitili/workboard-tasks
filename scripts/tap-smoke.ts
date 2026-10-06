@@ -1,7 +1,8 @@
 import "dotenv/config";
 import { db } from "../src/lib/db";
 import { inferDepartment } from "../src/lib/departments";
-import { personMatchesTapOwner, pickOpenTapItems, TAP_DEPARTMENTS, tapDepartment, tapPeople } from "../src/lib/data/tap-catalog";
+import { groupTapRocks, opsTapDeskCatalog, personMatchesTapOwner, pickOpenTapItems, TAP_DEPARTMENTS, tapDepartment, tapPeople } from "../src/lib/data/tap-catalog";
+import { isOpsLead } from "../src/lib/auth/admin";
 import { getKpiDashboard } from "../src/lib/services/kpi";
 import { pickDailyTapLineup } from "../src/lib/today/tap-lineup";
 import { syncTapTasks } from "../src/lib/services/tap-sync";
@@ -87,6 +88,28 @@ async function main() {
   check(
     personMatchesTapOwner({ name: "Mourine Lauwo", email: "moureenlauwo@silverleaf.co.tz" }, "Mourine Kitili") === false,
     "Mourine Lauwo is not Mourine Kitili",
+  );
+  check(isOpsLead({ name: "Baraka Majundo" }) === true, "Baraka Majundo is the ops TAP lead");
+  const desk = opsTapDeskCatalog();
+  check(desk.some((dept) => dept.slug === "operations" && dept.items.length >= 40), "ops desk includes Cluster Operations TAP");
+  check(
+    desk.some((dept) => dept.slug === "ece" && dept.items.some((item) => item.code === "9.3")),
+    "ops desk keeps Majundo’s ECE TAP lines",
+  );
+  check(
+    desk.some((dept) => dept.slug === "expansion" && dept.items.some((item) => item.code === "3.3")),
+    "ops desk keeps Majundo’s expansion TAP lines",
+  );
+  const opsRock = tapDepartment("operations");
+  const grouped = groupTapRocks(opsRock?.items ?? []);
+  const transport = grouped.find((rock) => rock.parent.code === "1.0");
+  check(Boolean(transport?.children.some((item) => item.code === "1.1")), "ops TAP 1.1 sits under rock 1.0");
+  check(opsRock?.items.find((item) => item.code === "1.1")?.deadline === "2026-08-31", "ops TAP 1.1 keeps its Excel deadline");
+  check(
+    desk
+      .find((dept) => dept.slug === "ece")
+      ?.items.find((item) => item.code === "9.3")?.deadline === "2026-10-31",
+    "Majundo ECE playground TAP keeps its Excel deadline",
   );
   const showEveryone = selectDepartmentStaff(sample).map((row) => row.name);
   check(

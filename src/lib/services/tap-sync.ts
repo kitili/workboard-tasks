@@ -171,6 +171,7 @@ export async function syncTapTasks(organizationId: string, slug?: DepartmentSlug
         source: true,
         assigneeId: true,
         sharedWithIds: true,
+        dueDate: true,
         dailyItem: { select: { id: true } },
       },
     }),
@@ -219,18 +220,19 @@ export async function syncTapTasks(organizationId: string, slug?: DepartmentSlug
         await db.task.deleteMany({ where: { id: { in: extras } } });
       }
       if (keep) {
-        const stillOwner = Boolean(
-          keep.assigneeId &&
-            (owners.some((owner) => owner.id === keep.assigneeId) || keep.assigneeId === supervisor?.id),
-        );
-        const assigneeId = stillOwner ? keep.assigneeId : (assignee?.id ?? keep.assigneeId ?? null);
+        const liveAssignee =
+          keep.assigneeId && users.some((user) => user.id === keep.assigneeId) ? keep.assigneeId : null;
+        const assigneeId = liveAssignee ?? assignee?.id ?? keep.assigneeId ?? null;
+        const nextShared = Array.from(new Set(owners.map((user) => user.id).filter((id) => id !== assigneeId)));
+        const nextDue = keep.dueDate ?? (item.deadline ? new Date(`${item.deadline}T00:00:00+03:00`) : null);
         const same =
           keep.description === description &&
           keep.assigneeId === assigneeId &&
-          keep.sharedWithIds.length === sharedWithIds.length &&
-          keep.sharedWithIds.every((id) => sharedWithIds.includes(id)) &&
+          keep.sharedWithIds.length === nextShared.length &&
+          keep.sharedWithIds.every((id) => nextShared.includes(id)) &&
           keep.labels.includes("TAP") &&
-          keep.labels.includes(`Rock ${item.code}`);
+          keep.labels.includes(`Rock ${item.code}`) &&
+          (keep.dueDate?.toISOString() ?? null) === (nextDue?.toISOString() ?? null);
         if (!same) {
           await db.task.update({
             where: { id: keep.id },
@@ -239,8 +241,9 @@ export async function syncTapTasks(organizationId: string, slug?: DepartmentSlug
               assigneeId,
               authorId: assigneeId ?? undefined,
               moveOwnerId: assigneeId ?? undefined,
-              sharedWithIds,
+              sharedWithIds: nextShared,
               labels: ["TAP", `Rock ${item.code}`],
+              dueDate: nextDue,
             },
           });
         }
@@ -264,6 +267,7 @@ export async function syncTapTasks(organizationId: string, slug?: DepartmentSlug
           moveOwnerId: assignee?.id,
           sharedWithIds,
           labels: ["TAP", `Rock ${item.code}`],
+          dueDate: item.deadline ? new Date(`${item.deadline}T00:00:00+03:00`) : null,
           columnOrder: Math.round(Number.parseFloat(item.code.replace(/^[^\d]*/, "")) * 100) || 0,
         },
       });
