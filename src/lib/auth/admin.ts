@@ -42,6 +42,30 @@ export function isOpsLead(user: AdminPerson | null | undefined) {
   return named(user, "baraka", ["majundo"]) || named(user, "majundo");
 }
 
+export const OPS_CREW_NAMES = ["Francis", "Kusaduka", "Shikunzi"] as const;
+export type OpsCrewName = (typeof OPS_CREW_NAMES)[number];
+export const OPS_DESK_NAMES = ["Baraka", "Francis", "Kusaduka", "Shikunzi"] as const;
+export type OpsDeskName = (typeof OPS_DESK_NAMES)[number];
+
+export function opsCrewLabel(user: AdminPerson | null | undefined): OpsCrewName | null {
+  if (!user || isOpsLead(user)) return null;
+  const text = haystack(user);
+  if (/\bshikunzi\b|\bshikuze\b|\bshikonze\b|\bshikunze\b/.test(text)) return "Shikunzi";
+  if (/\bkusaduka\b/.test(text)) return "Kusaduka";
+  if (/\bfrancis\b/.test(text)) return "Francis";
+  return null;
+}
+
+export function opsDeskPersonLabel(user: AdminPerson | null | undefined): OpsDeskName | null {
+  if (!user) return null;
+  if (isOpsLead(user)) return "Baraka";
+  return opsCrewLabel(user);
+}
+
+export function isOpsCrew(user: AdminPerson | null | undefined) {
+  return Boolean(opsCrewLabel(user));
+}
+
 export function isUpdatesAdmin(user: AdminPerson | null | undefined) {
   return isBoardAdmin(user);
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/session";
+import { isOpsCrew, isOpsLead } from "@/lib/auth/admin";
 import { getMyHistory, getTodaySheet, getTodayTapLineup } from "@/lib/services/daily-sheet";
 import { TodayForm } from "@/components/today/today-form";
 import { TaskHistory } from "@/components/today/task-history";
@@ -9,6 +10,9 @@ import { syncUserDepartment } from "@/lib/services/departments";
 import { syncTapTasks } from "@/lib/services/tap-sync";
 import { tapDepartment, tapPeople } from "@/lib/data/tap-catalog";
 import { TapRoster } from "@/components/board/tap-roster";
+import { canEditOpsTap, canRunOpsDesk, getOpsTapDesk } from "@/lib/services/ops-desk";
+import { OpsTapDesk } from "@/components/ops/ops-tap-desk";
+import { getDefaultOrganization } from "@/lib/data/dashboard";
 
 export const dynamic = "force-dynamic";
 
@@ -17,10 +21,26 @@ export default async function TodayPage() {
   if (!user) redirect("/login");
 
   const departmentSlug = await syncUserDepartment(user.id);
+  const person = { ...user, departmentSlug };
+
+  if (isOpsLead(person)) {
+    const org = await getDefaultOrganization();
+    if (!org) return <p className="text-zinc-500">No organization yet.</p>;
+    const desk = await getOpsTapDesk(org.id);
+    return (
+      <OpsTapDesk
+        groups={desk.groups}
+        people={desk.people}
+        allocations={desk.allocations}
+        canAssign={canRunOpsDesk(person)}
+        canEditStatus={canEditOpsTap(person)}
+      />
+    );
+  }
+
   if (departmentSlug) {
     await syncTapTasks(user.organizationId, departmentSlug);
   }
-  const person = { ...user, departmentSlug };
   const [sheet, history, taps] = await Promise.all([
     getTodaySheet(user.organizationId),
     getMyHistory(user.id),
@@ -28,7 +48,8 @@ export default async function TodayPage() {
   ]);
   const me = sheet.people.find((row) => row.id === user.id);
   const departmentName = departmentNameFor(person);
-  const roster = tapPeople(departmentSlug);
+  const crew = isOpsCrew(person);
+  const roster = crew ? [] : tapPeople(departmentSlug);
   const tap = tapDepartment(departmentSlug);
 
   return (
@@ -41,9 +62,11 @@ export default async function TodayPage() {
           </p>
           <h2 className="mt-1 font-[family-name:var(--font-display)] text-3xl text-[#002368]">My 1–5’s</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[#4f555f]">
-            {departmentName
-              ? `Park up to three open ${departmentName} TAP lines into today’s blanks. Done ones rotate out tomorrow.`
-              : "Park up to three open TAP lines into today’s blanks. Done ones rotate out tomorrow."}
+            {crew
+              ? "Baraka parks today’s three here. You can still edit a line if the plan changes."
+              : departmentName
+                ? `Park up to three open ${departmentName} TAP lines into today’s blanks. Done ones rotate out tomorrow.`
+                : "Park up to three open TAP lines into today’s blanks. Done ones rotate out tomorrow."}
           </p>
         </div>
         <Link href="/board?mine=1" className="on-navy rounded-full px-4 py-2.5 text-sm font-semibold">
@@ -57,6 +80,7 @@ export default async function TodayPage() {
         lineup={taps.lineup}
         more={taps.more}
         departmentName={departmentName}
+        assignedOnly={false}
       />
       <TaskHistory entries={history.entries} diligence={history.diligence} />
     </div>

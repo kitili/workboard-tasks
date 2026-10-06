@@ -1,5 +1,5 @@
 import { startOfDay, subDays } from "date-fns";
-import { isOpenTapStatus, TAP_DEPARTMENTS } from "@/lib/data/tap-catalog";
+import { boardStatusToTap, isOpenTapStatus, TAP_DEPARTMENTS } from "@/lib/data/tap-catalog";
 import { DEPARTMENTS } from "@/lib/departments";
 import { isNamedStaff, isRealLogin } from "@/lib/board/missing-daily";
 import { db } from "@/lib/db";
@@ -10,8 +10,42 @@ export async function getKpiDashboard(organizationId: string) {
   const today = startOfDay(new Date());
   const weekAgo = subDays(today, 7);
 
+  const [users, boardTasks, tapCards] = await Promise.all([
+    db.user.findMany({
+      where: { organizationId, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        departmentSlug: true,
+        dailyPlans: {
+          orderBy: { planDate: "desc" },
+          take: 1,
+          select: { planDate: true, items: { select: { id: true } } },
+        },
+        progressUpdates: { orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
+      },
+    }),
+    db.task.groupBy({
+      by: ["departmentSlug", "status"],
+      where: { organizationId, labels: { has: "TAP" }, status: { not: "CANCELLED" } },
+      _count: true,
+    }),
+    db.task.findMany({
+      where: { organizationId, labels: { has: "TAP" }, status: { not: "CANCELLED" } },
+      select: { title: true, status: true, departmentSlug: true },
+    }),
+  ]);
+
+  const liveTap = new Map(tapCards.map((row) => [`${row.departmentSlug ?? ""}::${row.title}`, row.status]));
+
   const tapDepts = TAP_DEPARTMENTS.map((dept) => {
-    const items = dept.items.filter((item) => item.status !== "Removed");
+    const items = dept.items
+      .filter((item) => item.status !== "Removed")
+      .map((item) => {
+        const board = liveTap.get(`${dept.slug}::${item.code} ${item.title}`);
+        return { ...item, status: board ? boardStatusToTap(board, item.status) : item.status };
+      });
     const done = items.filter((item) => DONE.has(item.status)).length;
     const behind = items.filter((item) => item.status === "Behind Schedule").length;
     const notStarted = items.filter((item) => item.status === "Not Started").length;
@@ -43,29 +77,6 @@ export async function getKpiDashboard(organizationId: string) {
       lagging,
     };
   }).sort((a, b) => a.pctDone - b.pctDone);
-
-  const [users, boardTasks] = await Promise.all([
-    db.user.findMany({
-      where: { organizationId, isActive: true },
-      select: {
-        id: true,
-        name: true,
-        phone: true,
-        departmentSlug: true,
-        dailyPlans: {
-          orderBy: { planDate: "desc" },
-          take: 1,
-          select: { planDate: true, items: { select: { id: true } } },
-        },
-        progressUpdates: { orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
-      },
-    }),
-    db.task.groupBy({
-      by: ["departmentSlug", "status"],
-      where: { organizationId, labels: { has: "TAP" }, status: { not: "CANCELLED" } },
-      _count: true,
-    }),
-  ]);
 
   const staff = users.filter((user) => isNamedStaff(user.name) && isRealLogin(user.phone) && user.departmentSlug);
   const filedToday = staff.filter((user) => {

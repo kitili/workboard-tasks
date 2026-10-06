@@ -162,18 +162,37 @@ export function isTeamOwner(name: string) {
   return tapOwnerKey(name).startsWith("team:");
 }
 
+export function isPlaceholderOwner(name: string) {
+  const text = name.trim();
+  if (!text) return true;
+  if (/^\d/.test(text)) return true;
+  return /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/i.test(text) && /\b20\d{2}\b/.test(text);
+}
+
 export function tapFirstNameIsShared(name: string) {
   const first = nameTokens(name)[0] ?? "";
   return SHARED_FIRST_NAMES.has(first) || SHARED_FIRST_NAMES.has(tapOwnerKey(name));
 }
 
+function isMajundoPerson(person: DepartmentPerson) {
+  const name = (person.name ?? "").toLowerCase();
+  if (name.includes("lema")) return false;
+  if (name.includes("majundo")) return true;
+  if ((person.email ?? "").trim().toLowerCase() === "baraka@silverleaf.co.tz") return true;
+  const parts = nameTokens(person.name ?? "");
+  return parts[0] === "baraka" && (parts.includes("majundo") || parts.length === 1);
+}
+
 export function personMatchesTapOwner(person: DepartmentPerson, owner: string) {
-  if (isTeamOwner(owner)) return false;
+  if (isTeamOwner(owner) || isPlaceholderOwner(owner)) return false;
   const ownerParts = nameTokens(owner);
   const ownerFirst = ownerParts[0];
   if (!ownerFirst) return false;
   const key = tapOwnerKey(owner);
   if (!key || key.startsWith("team:")) return false;
+  if (isMajundoPerson(person) && (key === "baraka" || owner.toLowerCase().includes("majundo") || owner.toLowerCase().includes("operations lead"))) {
+    return true;
+  }
 
   const expectedLast = ownerParts.length > 1 ? ownerParts.slice(1) : nameTokens(OWNER_DISPLAY[key] ?? owner).slice(1);
   const personParts = nameTokens(person.name ?? "");
@@ -208,6 +227,26 @@ export function tapStatusToBoard(status: TapStatus) {
     return "IN_PROGRESS" as const;
   }
   return "TODO" as const;
+}
+
+export function boardStatusToTap(status: string, fallback: TapStatus = "On Schedule"): TapStatus {
+  if (status === "COMPLETED") return "Fully Completed";
+  if (status === "BACKLOG") return "Not Started";
+  if (status === "BLOCKED") return "Behind Schedule";
+  if (status === "IN_PROGRESS" || status === "IN_REVIEW") {
+    if (fallback === "Behind Schedule" || fallback === "Partially Completed" || fallback === "Ongoing") return fallback;
+    return "Ongoing";
+  }
+  if (status === "TODO") return "On Schedule";
+  return fallback;
+}
+
+export function stampTapDescription(description: string | null | undefined, tapStatus: TapStatus) {
+  const base = (description ?? "").replace(
+    /\s·\s(?:Not Started|On Schedule|Ongoing|Partially Completed|Behind Schedule|Fully Completed|Completed|Removed)\s*$/i,
+    "",
+  );
+  return `${base} · ${tapStatus}`.replace(/^ · /, "");
 }
 
 const OTHER = (tapOther as TapDepartment[]).map((dept) => ({
@@ -348,7 +387,7 @@ export function tapPeople(slug: string | null | undefined) {
   const names = new Map<string, { name: string; open: number; parent: boolean }>();
   for (const item of dept.items) {
     for (const owner of itemPeople(item)) {
-      if (isTeamOwner(owner)) continue;
+      if (isTeamOwner(owner) || isPlaceholderOwner(owner)) continue;
       const key = tapOwnerKey(owner);
       const name = OWNER_DISPLAY[key] ?? owner;
       const current = names.get(key) ?? { name, open: 0, parent: false };
@@ -384,9 +423,17 @@ export function isOpsTapOwnerName(name: string) {
   return tapOwnerKey(name) === "baraka" || text.includes("baraka") || text.includes("majundo");
 }
 
+export function isOpsDeskPersonName(name: string) {
+  if (isOpsTapOwnerName(name)) return true;
+  const text = name.toLowerCase();
+  const key = tapOwnerKey(name);
+  return key === "francis" || key === "shikunzi" || key === "kusaduka" || text.includes("shikuze") || text.includes("shikonze");
+}
+
 export function tapItemBelongsOnOpsDesk(deptSlug: string, item: TapItem) {
-  if (deptSlug === "operations") return item.status !== "Removed";
-  return [...item.owners, ...(item.helpers ?? [])].some(isOpsTapOwnerName) && item.status !== "Removed";
+  if (item.status === "Removed") return false;
+  if (deptSlug === "operations") return true;
+  return [...item.owners, ...(item.helpers ?? [])].some(isOpsDeskPersonName);
 }
 
 function codeParts(code: string) {

@@ -3,13 +3,16 @@ import { allocateTaskKey } from "@/lib/board/task-key";
 import type { DepartmentSlug } from "@/lib/departments";
 import { repairStaffIdentities } from "@/lib/auth/staff-user";
 import {
-  isOpenTapStatus,
+  boardStatusToTap,
   personMatchesTapOwner,
+  stampTapDescription,
   tapFirstNameIsShared,
   tapStatusToBoard,
   uniqueTapRosterPeople,
   TAP_DEPARTMENTS,
   type TapDepartment,
+  type TapItem,
+  type TapStatus,
 } from "@/lib/data/tap-catalog";
 
 type TapUser = {
@@ -172,6 +175,7 @@ export async function syncTapTasks(organizationId: string, slug?: DepartmentSlug
         assigneeId: true,
         sharedWithIds: true,
         dueDate: true,
+        status: true,
         dailyItem: { select: { id: true } },
       },
     }),
@@ -189,7 +193,7 @@ export async function syncTapTasks(organizationId: string, slug?: DepartmentSlug
   for (const dept of departments) {
     const supervisor = departmentSupervisor(users, dept);
     for (const item of dept.items) {
-      if (!isOpenTapStatus(item.status)) continue;
+      if (item.status === "Removed") continue;
       const title = `${item.code} ${item.title}`;
       const key = `${dept.slug}::${title}`;
       const named = [...item.owners, ...(item.helpers ?? [])];
@@ -207,9 +211,6 @@ export async function syncTapTasks(organizationId: string, slug?: DepartmentSlug
       }
       const assignee = owners[0] ?? supervisor;
       const sharedWithIds = owners.filter((user) => user.id !== assignee?.id).map((user) => user.id);
-      const description = `${dept.tap} · Person responsible: ${item.owners.join(" / ") || dept.responsible}${
-        item.helpers?.length ? ` · With: ${item.helpers.join(" / ")}` : ""
-      } · ${item.status}`;
       const matches = grouped.get(key) ?? [];
       const keep = matches[0];
       const extras = matches
@@ -219,6 +220,8 @@ export async function syncTapTasks(organizationId: string, slug?: DepartmentSlug
       if (extras.length) {
         await db.task.deleteMany({ where: { id: { in: extras } } });
       }
+      const liveTap = keep ? boardStatusToTap(keep.status, item.status) : item.status;
+      const description = tapSheetLine(dept, item, liveTap);
       if (keep) {
         const liveAssignee =
           keep.assigneeId && users.some((user) => user.id === keep.assigneeId) ? keep.assigneeId : null;
@@ -274,6 +277,15 @@ export async function syncTapTasks(organizationId: string, slug?: DepartmentSlug
     }
   }
 
+}
+
+function tapSheetLine(dept: TapDepartment, item: TapItem, tapStatus: TapStatus) {
+  return stampTapDescription(
+    `${dept.tap} · Person responsible: ${item.owners.join(" / ") || dept.responsible}${
+      item.helpers?.length ? ` · With: ${item.helpers.join(" / ")}` : ""
+    }`,
+    tapStatus,
+  );
 }
 
 export async function syncDataTechTapTasks(organizationId: string) {

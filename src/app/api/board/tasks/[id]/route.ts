@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { isBoardAdmin } from "@/lib/auth/admin";
+import { isBoardAdmin, isOpsCrew, isOpsLead } from "@/lib/auth/admin";
 import { canAssignTask, canMoveTask } from "@/lib/board/access";
 import { canSeeDepartment } from "@/lib/departments";
 import { getSessionUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { getTaskDetail } from "@/lib/data/board";
+import { boardStatusToTap, stampTapDescription } from "@/lib/data/tap-catalog";
 import { syncDailyItemStatus, syncDailyItemTitle } from "@/lib/services/daily-sheet";
 
 const updateSchema = z.object({
@@ -63,7 +64,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "That card stays inside its department." }, { status: 403 });
     }
     const moving = body.status && body.status !== existing.status;
-    if (moving && !canMoveTask(existing, session.id, admin)) {
+    const opsTapMove = Boolean(existing.labels.includes("TAP") && (isOpsLead(session) || isOpsCrew(session)));
+    if (moving && !canMoveTask(existing, session.id, admin) && !opsTapMove) {
       return NextResponse.json({ error: "You can only move a card you own, or one shared with you." }, { status: 403 });
     }
     const assigning = body.shareWith || body.handoverTo || body.assigneeId !== undefined;
@@ -96,7 +98,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       where: { id },
       data: {
         title: body.title,
-        description: body.description,
+        description:
+          existing.labels.includes("TAP") && body.status && body.status !== existing.status
+            ? stampTapDescription(body.description ?? existing.description, boardStatusToTap(body.status))
+            : body.description,
         status: body.status,
         type: body.type,
         priority: body.priority,

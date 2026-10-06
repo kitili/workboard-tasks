@@ -13,6 +13,7 @@ export type DataTechTapItem = {
   code: string;
   title: string;
   owners: string[];
+  helpers?: string[];
   status: TapStatus;
 };
 
@@ -40,7 +41,7 @@ export const DATA_TECH_TAP_ITEMS: DataTechTapItem[] = [
   { code: "2.2", status: "Ongoing", owners: ["Paul"], title: "Identify and prioritize areas where AI and automation can reduce manual work and improve efficiency" },
   { code: "2.3", status: "On Schedule", owners: ["Paul"], title: "Create a summary dashboard tab, one view showing all departments, overall % completion, and what changed that week" },
   { code: "2.4", status: "Ongoing", owners: ["Paul"], title: "Train staff and provide support to ensure successful adoption of new systems" },
-  { code: "2.5", status: "Ongoing", owners: ["Mourine", "Nehemia"], title: "Operations department system development" },
+  { code: "2.5", status: "Ongoing", owners: ["Mourine", "Nehemia"], helpers: ["Baraka", "Paul"], title: "Operations department system development" },
   { code: "2.7", status: "Ongoing", owners: ["Mourine"], title: "HR system automation" },
   { code: "2.8", status: "Ongoing", owners: ["Nehemia"], title: "Expansion system automation (app development)" },
   { code: "3.0", status: "On Schedule", owners: ["Paul"], title: "MEL Systems, Data collection tools and Dashboards Live" },

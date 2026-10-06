@@ -1,8 +1,8 @@
 import "dotenv/config";
 import { db } from "../src/lib/db";
 import { inferDepartment } from "../src/lib/departments";
-import { groupTapRocks, opsTapDeskCatalog, personMatchesTapOwner, pickOpenTapItems, TAP_DEPARTMENTS, tapDepartment, tapPeople } from "../src/lib/data/tap-catalog";
-import { isOpsLead } from "../src/lib/auth/admin";
+import { boardStatusToTap, groupTapRocks, opsTapDeskCatalog, personMatchesTapOwner, pickOpenTapItems, TAP_DEPARTMENTS, tapDepartment, tapItemBelongsOnOpsDesk, tapPeople } from "../src/lib/data/tap-catalog";
+import { isOpsCrew, isOpsLead, opsCrewLabel, opsDeskPersonLabel } from "../src/lib/auth/admin";
 import { getKpiDashboard } from "../src/lib/services/kpi";
 import { pickDailyTapLineup } from "../src/lib/today/tap-lineup";
 import { syncTapTasks } from "../src/lib/services/tap-sync";
@@ -90,6 +90,25 @@ async function main() {
     "Mourine Lauwo is not Mourine Kitili",
   );
   check(isOpsLead({ name: "Baraka Majundo" }) === true, "Baraka Majundo is the ops TAP lead");
+  check(isOpsLead({ name: "Majundo Hassan" }) === true, "Ed Admin Majundo Hassan is the ops TAP lead");
+  check(isOpsCrew({ name: "Francis" }) === true, "Francis is ops crew, not a TAP portal");
+  check(isOpsCrew({ name: "Kusaduka" }) === true, "Kusaduka is ops crew, not a TAP portal");
+  check(isOpsCrew({ name: "Shikunzi" }) === true, "Shikunzi is ops crew, not a TAP portal");
+  check(opsCrewLabel({ name: "Shikuze" }) === "Shikunzi", "Shikuze stays labelled Shikunzi");
+  check(isOpsCrew({ name: "Majundo Hassan" }) === false, "Majundo is the ops lead, not crew");
+  check(
+    personMatchesTapOwner({ name: "Majundo Hassan", email: "baraka@silverleaf.co.tz" }, "Baraka") === true,
+    "Majundo Hassan still owns Baraka TAP lines",
+  );
+  check(
+    personMatchesTapOwner({ name: "Baraka Lema", email: "barakalema@silverleaf.co.tz" }, "Baraka") === false,
+    "Baraka Lema is not Cluster Ops TAP",
+  );
+  check(opsDeskPersonLabel({ name: "Majundo Hassan" }) === "Baraka", "Majundo can take a TAP himself");
+  check(opsDeskPersonLabel({ name: "Francis" }) === "Francis", "Francis is on the ops desk people");
+  check(boardStatusToTap("COMPLETED") === "Fully Completed", "board Done stamps Fully Completed on the sheet");
+  check(boardStatusToTap("IN_PROGRESS") === "Ongoing", "board Doing stamps Ongoing on the sheet");
+  check(boardStatusToTap("BACKLOG") === "Not Started", "board Backlog stamps Not Started on the sheet");
   const desk = opsTapDeskCatalog();
   check(desk.some((dept) => dept.slug === "operations" && dept.items.length >= 40), "ops desk includes Cluster Operations TAP");
   check(
@@ -100,6 +119,22 @@ async function main() {
     desk.some((dept) => dept.slug === "expansion" && dept.items.some((item) => item.code === "3.3")),
     "ops desk keeps Majundo’s expansion TAP lines",
   );
+  check(
+    desk.some((dept) => dept.slug === "arusha-modern" && dept.items.some((item) => item.code === "11.1")),
+    "ops desk includes campus TAP that names Francis and Baraka",
+  );
+  check(
+    desk.some((dept) => dept.slug === "kijenge" && dept.items.some((item) => item.code === "11.0")),
+    "ops desk includes Kijenge TAP that names Francis",
+  );
+  check(
+    desk.some((dept) => dept.slug === "data-tech" && dept.items.some((item) => item.code === "2.5")),
+    "ops desk includes DATA & TECH 2.5 where Baraka helps",
+  );
+  const am = TAP_DEPARTMENTS.find((dept) => dept.slug === "arusha-modern");
+  const amEleven = am?.items.find((item) => item.code === "11.0");
+  check(Boolean(amEleven && tapItemBelongsOnOpsDesk("arusha-modern", amEleven)), "Francis-owned campus TAP belongs on the ops desk");
+  check(!(amEleven?.helpers ?? []).some((name) => /dec|2026/i.test(name)), "campus TAP helpers are people, not deadline text");
   const opsRock = tapDepartment("operations");
   const grouped = groupTapRocks(opsRock?.items ?? []);
   const transport = grouped.find((rock) => rock.parent.code === "1.0");

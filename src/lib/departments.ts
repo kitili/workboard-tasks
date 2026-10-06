@@ -202,7 +202,7 @@ export function inferDepartment(person: DepartmentPerson): DepartmentSlug | null
   }
   if (/\bfinance\b|\baccount|\bbudget|\bfee\b|\blilian\b|\bimani\b|\bvaileth\b/.test(text)) return "finance";
   if (
-    /\boperations\b|\btransport\b|\bkitchen\b|\bfacilit|\bfarm\b|\bbaraka\b|\bfrancis\b|\bshikunzi\b|\bkusaduka\b/.test(
+    /\boperations?\b|\btransport\b|\bkitchen\b|\bfacilit|\bfarm\b|\bbaraka\b|\bmajundo\b|\bfrancis\b|\bshikunzi\b|\bkusaduka\b/.test(
       text,
     )
   ) {

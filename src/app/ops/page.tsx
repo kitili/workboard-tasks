@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/session";
 import { getDefaultOrganization } from "@/lib/data/dashboard";
-import { canRunOpsDesk, canViewOpsDesk, getOpsTapDesk } from "@/lib/services/ops-desk";
+import { canEditOpsTap, canRunOpsDesk, canViewOpsDesk, getOpsTapDesk } from "@/lib/services/ops-desk";
 import { OpsTapDesk } from "@/components/ops/ops-tap-desk";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,9 @@ export default async function OpsTapPage() {
     <OpsTapDesk
       groups={desk.groups}
       people={desk.people}
+      allocations={desk.allocations}
       canAssign={canRunOpsDesk(session)}
+      canEditStatus={canEditOpsTap(session)}
     />
   );
 }

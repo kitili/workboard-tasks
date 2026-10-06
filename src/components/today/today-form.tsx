@@ -38,12 +38,14 @@ export function TodayForm({
   lineup = [],
   more = [],
   departmentName = null,
+  assignedOnly = false,
 }: {
   filed: boolean;
   saved?: Array<{ slot: number; title: string; taskId?: string | null }>;
   lineup?: TodayTapChip[];
   more?: TodayTapChip[];
   departmentName?: string | null;
+  assignedOnly?: boolean;
 }) {
   const router = useRouter();
   const [rows, setRows] = useState<Row[]>(() => rowsFrom(saved));
@@ -51,8 +53,10 @@ export function TodayForm({
   const [saving, setSaving] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [notice, setNotice] = useState(
-    filed
-      ? "These lines are already on your board. Edit them here and save — the cards follow."
+    assignedOnly
+      ? "Baraka assigns today’s three. Add a wobble and recap if you need them."
+      : filed
+        ? "These lines are already on your board. Edit them here and save — the cards follow."
       : "Drag a TAP into 1, 2 or 3 — or tap it.",
   );
   const sensors = useSensors(
@@ -155,7 +159,8 @@ export function TodayForm({
       <div className="space-y-6 p-6">
         {notice ? <p className="rounded-2xl bg-[#FFF7E5] px-4 py-3 text-sm text-[#14233B]">{notice}</p> : null}
 
-        <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+        <DndContext sensors={sensors} onDragEnd={assignedOnly ? () => undefined : onDragEnd}>
+          {assignedOnly ? null : (
           <section className="space-y-3 rounded-3xl bg-[#F3EEFF] p-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#002368]">Today’s TAP</p>
@@ -203,18 +208,26 @@ export function TodayForm({
               </div>
             ) : null}
           </section>
+          )}
 
           <section className="space-y-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#002368]">01 — 03</p>
-              <h3 className="mt-1 font-[family-name:var(--font-display)] text-xl text-[#002368]">Drop today’s three</h3>
-              <p className="mt-1 text-sm text-[#4f555f]">Blank until you park a TAP or write a line of your own.</p>
+              <h3 className="mt-1 font-[family-name:var(--font-display)] text-xl text-[#002368]">
+                {assignedOnly ? "Today’s three from Baraka" : "Drop today’s three"}
+              </h3>
+              <p className="mt-1 text-sm text-[#4f555f]">
+                {assignedOnly
+                  ? "These TAP lines stay with the ops TAP. Baraka places them here for the day."
+                  : "Blank until you park a TAP or write a line of your own."}
+              </p>
             </div>
             {priorities.map((line) => (
               <SlotField
                 key={line.slot}
                 line={line}
                 value={rows[line.slot - 1]?.title ?? ""}
+                readOnly={assignedOnly}
                 onChange={(title) => setRow(line.slot, { title, taskId: null })}
                 onRemove={() => void removeLine(line.slot)}
               />
@@ -296,11 +309,13 @@ function TapChip({
 function SlotField({
   line,
   value,
+  readOnly = false,
   onChange,
   onRemove,
 }: {
   line: (typeof DAILY_LINES)[number];
   value: string;
+  readOnly?: boolean;
   onChange: (title: string) => void;
   onRemove: () => void;
 }) {
@@ -309,7 +324,7 @@ function SlotField({
 
   return (
     <div
-      ref={setNodeRef}
+      ref={readOnly ? undefined : setNodeRef}
       className={`rounded-3xl border p-3 ${
         isOver ? "border-[#002368] bg-[#D9ECF9]" : filled ? "border-[#002368]/10 bg-white" : "border-dashed border-[#002368]/25 bg-[#F8FBFF]"
       }`}
@@ -321,18 +336,19 @@ function SlotField({
         <div className="space-y-2">
           <input
             value={value}
+            readOnly={readOnly}
             onChange={(e) => onChange(e.target.value)}
-            placeholder={filled ? line.hint : "Drop a TAP here, or write your own"}
+            placeholder={readOnly ? "Baraka hasn’t placed a TAP here yet" : filled ? line.hint : "Drop a TAP here, or write your own"}
             className="w-full rounded-2xl border border-[#002368]/15 px-3 py-2.5 text-sm"
             style={{ color: "#14233B", backgroundColor: "#ffffff" }}
           />
-          {filled ? (
+          {filled && !readOnly ? (
             <button type="button" onClick={onRemove} className="rounded-full bg-[#FFF0F0] px-3 py-1 text-xs font-semibold text-[#9B2C2C]">
               Take out
             </button>
-          ) : (
-            <p className="text-xs text-[#4f555f]">Empty on purpose.</p>
-          )}
+          ) : !filled ? (
+            <p className="text-xs text-[#4f555f]">{readOnly ? "Waiting on Baraka." : "Empty on purpose."}</p>
+          ) : null}
         </div>
       </div>
     </div>

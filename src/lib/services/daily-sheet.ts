@@ -2,6 +2,7 @@ import { format, startOfDay, startOfWeek, subDays } from "date-fns";
 import type { TaskPriority, TaskStatus } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { allocateTaskKey } from "@/lib/board/task-key";
+import { isOpsCrew, isOpsLead } from "@/lib/auth/admin";
 import { itemsForTapPerson, pickOpenTapItems, tapDepartment } from "@/lib/data/tap-catalog";
 import { getEnv } from "@/lib/env";
 import { pickDailyTapLineup, type TodayTapChip } from "@/lib/today/tap-lineup";
@@ -222,6 +223,7 @@ export async function getTodayTapLineup(userId: string): Promise<{ lineup: Today
     },
   });
   if (!user) return { lineup: [], more: [] };
+  if (isOpsLead(user) || isOpsCrew(user)) return { lineup: [], more: [] };
 
   const today = startOfDay(new Date());
   const yesterday = subDays(today, 1);
@@ -658,7 +660,7 @@ async function attachMissingDailyCards(organizationId: string) {
   }
 }
 
-export async function assignTapToday(userId: string, taskId: string) {
+export async function assignTapToday(userId: string, taskId: string, slot?: number | null) {
   const user = await db.user.findUnique({ where: { id: userId } });
   if (!user) throw new Error("Person not found");
   const task = await db.task.findUnique({
@@ -677,12 +679,14 @@ export async function assignTapToday(userId: string, taskId: string) {
 
   const planDate = startOfDay(new Date());
   const current = task.dailyItem;
+  const wanted = slot && slot >= 1 && slot <= 3 ? slot : null;
   const alreadyToday =
     current &&
     current.dailyPlan.userId === userId &&
     current.dailyPlan.planDate.getTime() === planDate.getTime() &&
     current.slot >= 1 &&
-    current.slot <= 3;
+    current.slot <= 3 &&
+    (wanted == null || current.slot === wanted);
   if (alreadyToday) {
     return { parked: true as const, slot: current.slot };
   }
@@ -697,21 +701,37 @@ export async function assignTapToday(userId: string, taskId: string) {
     update: { submittedAt: new Date() },
   });
   const items = await db.dailyPlanItem.findMany({ where: { dailyPlanId: plan.id, slot: { lte: 3 } } });
-  const empty = [1, 2, 3].find((slot) => {
-    const row = items.find((item) => item.slot === slot);
+  const empty = [1, 2, 3].find((line) => {
+    const row = items.find((item) => item.slot === line);
     return !row || !row.title.trim();
   });
-  if (!empty) {
+  const target = wanted ?? empty;
+  if (!target) {
     return { parked: false as const, slot: null as number | null };
   }
-  const row = items.find((item) => item.slot === empty);
+  const row = items.find((item) => item.slot === target);
   const payload = { title: task.title, status: task.status, taskId: task.id };
   if (row) {
     await db.dailyPlanItem.update({ where: { id: row.id }, data: payload });
   } else {
     await db.dailyPlanItem.create({
-      data: { dailyPlanId: plan.id, slot: empty, ...payload },
+      data: { dailyPlanId: plan.id, slot: target, ...payload },
     });
   }
-  return { parked: true as const, slot: empty };
+  return { parked: true as const, slot: target };
+}
+
+export async function clearTapTodaySlot(userId: string, slot: number) {
+  if (slot < 1 || slot > 3) return;
+  const planDate = startOfDay(new Date());
+  const plan = await db.dailyPlan.findUnique({
+    where: { userId_planDate: { userId, planDate } },
+    include: { items: true },
+  });
+  const item = plan?.items.find((row) => row.slot === slot);
+  if (!item) return;
+  await db.dailyPlanItem.update({
+    where: { id: item.id },
+    data: { title: "", taskId: null },
+  });
 }
