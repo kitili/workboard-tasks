@@ -2,6 +2,8 @@ import { db } from "@/lib/db";
 import { getEnv } from "@/lib/env";
 import { setSession } from "@/lib/auth/session";
 import { inferDepartment } from "@/lib/departments";
+import { fetchStaffDirectory } from "@/lib/auth/ed-admin";
+import { normalizeStaffEmail } from "@/lib/email";
 
 export async function openStaffSession(input: {
   email: string;
@@ -15,19 +17,19 @@ export async function openStaffSession(input: {
   const existing = await db.user.findUnique({ where: { email } });
   if (existing) {
     if (!existing.isActive) return { ok: false as const, error: "inactive" as const };
-    const nextTitle = existing.jobTitle?.trim() ? existing.jobTitle : jobTitle;
-    const departmentSlug =
-      existing.departmentSlug ??
-      inferDepartment({
-        name: existing.name?.trim() ? existing.name : name,
-        username: existing.username,
-        email,
-        jobTitle: nextTitle,
-      });
+    const nextName = name || existing.name;
+    const nextTitle = jobTitle || existing.jobTitle;
+    const departmentSlug = inferDepartment({
+      name: nextName,
+      username: existing.username,
+      email,
+      jobTitle: nextTitle,
+      departmentSlug: existing.departmentSlug,
+    });
     await db.user.update({
       where: { id: existing.id },
       data: {
-        name: existing.name?.trim() ? existing.name : name,
+        name: nextName,
         jobTitle: nextTitle,
         departmentSlug,
       },
@@ -62,4 +64,48 @@ export async function openStaffSession(input: {
   });
   await setSession(user.id);
   return { ok: true as const, isNew: !name };
+}
+
+export async function repairStaffIdentities(organizationId: string) {
+  let directory: Awaited<ReturnType<typeof fetchStaffDirectory>>;
+  try {
+    directory = await fetchStaffDirectory();
+  } catch {
+    return 0;
+  }
+
+  const byEmail = new Map<string, (typeof directory)[number]>();
+  for (const row of directory) {
+    const email = normalizeStaffEmail(row.email);
+    if (!email) continue;
+    if (row.statusName.trim().toLowerCase() !== "current" || row.disabled) continue;
+    if (!byEmail.has(email)) byEmail.set(email, row);
+  }
+
+  const users = await db.user.findMany({
+    where: { organizationId, isActive: true, email: { not: null } },
+    select: { id: true, name: true, username: true, email: true, jobTitle: true, departmentSlug: true },
+  });
+
+  let updated = 0;
+  for (const user of users) {
+    const row = user.email ? byEmail.get(normalizeStaffEmail(user.email)) : undefined;
+    if (!row) continue;
+    const name = `${row.firstName} ${row.lastName}`.trim() || user.name;
+    const jobTitle = row.position.trim() || user.jobTitle;
+    const departmentSlug = inferDepartment({
+      name,
+      username: user.username,
+      email: user.email,
+      jobTitle,
+      departmentSlug: user.departmentSlug,
+    });
+    if (user.name === name && user.jobTitle === jobTitle && user.departmentSlug === departmentSlug) continue;
+    await db.user.update({
+      where: { id: user.id },
+      data: { name, jobTitle, departmentSlug },
+    });
+    updated += 1;
+  }
+  return updated;
 }

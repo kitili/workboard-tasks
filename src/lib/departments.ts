@@ -167,7 +167,20 @@ export function departmentBySlug(slug: string | null | undefined) {
   return DEPARTMENTS.find((item) => item.slug === key) ?? null;
 }
 
+function inferDepartmentFromIdentity(person: DepartmentPerson): DepartmentSlug | null {
+  const text = haystack(person);
+  if (/\birene\b/.test(text) && /\bmusau\b/.test(text)) return "data-tech";
+  if (/\b(machange|didass)\b/.test(text)) return "ilboru";
+  if (/\bgeoffrey\b/.test(text) && /\bmuli\b/.test(text)) return "data-tech";
+  if (/\bmourine\b/.test(text) && /\bkitili\b/.test(text)) return "data-tech";
+  if (/\b(julius|macharia)\b/.test(text) && /\bkimani\b/.test(text)) return "ece";
+  return null;
+}
+
 export function inferDepartment(person: DepartmentPerson): DepartmentSlug | null {
+  const named = inferDepartmentFromIdentity(person);
+  if (named) return named;
+
   const stored = person.departmentSlug === "academic" ? "ece" : person.departmentSlug;
   if (stored && DEPARTMENTS.some((item) => item.slug === stored)) {
     return stored as DepartmentSlug;
@@ -196,7 +209,7 @@ export function inferDepartment(person: DepartmentPerson): DepartmentSlug | null
     return "operations";
   }
   if (
-    /\bdata\b|\btech\b|\bsis\b|\bsoftware\b|\bdeveloper\b|\bfellow\b|\bmourine\b|\bpaul\b|\bnehemia\b|\bonesmo\b|\bkatya\b|\bgeoffrey\b/.test(
+    /\bdata\b|\btech\b|\bsis\b|\bsoftware\b|\bdeveloper\b|\bfellow\b|\bpaul\b|\bnehemia\b|\bonesmo\b|\bkatya\b|\bgeoffrey\b/.test(
       text,
     )
   ) {
@@ -213,7 +226,7 @@ export function inferDepartment(person: DepartmentPerson): DepartmentSlug | null
   if (/\bbrenda\b|\bagness\b|\bglory\b/.test(text)) return "arusha-modern";
   if (/\bneema\b/.test(text)) return "boma";
   if (/\bkambona\b/.test(text)) return "kijenge";
-  if (/\birene\b|\bmachange\b/.test(text)) return "ilboru";
+  if (/\bmachange\b|\bdidass\b/.test(text)) return "ilboru";
   return null;
 }
 

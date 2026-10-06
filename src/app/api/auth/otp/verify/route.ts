@@ -45,15 +45,11 @@ export async function POST(request: NextRequest) {
 
   await db.emailOtp.update({ where: { id: otp.id }, data: { usedAt: now } });
 
-  const known = await db.user.findUnique({
-    where: { email },
-    select: { name: true, jobTitle: true },
-  });
-  const directory = known?.name ? null : await verifyEdAdminStaffByEmail(email);
+  const directory = await verifyEdAdminStaffByEmail(email);
   const session = await openStaffSession({
     email,
-    name: known?.name ?? (directory?.ok ? directory.fullName : null),
-    jobTitle: known?.jobTitle ?? (directory?.ok ? directory.jobTitle : null),
+    name: directory.ok ? directory.fullName : null,
+    jobTitle: directory.ok ? directory.jobTitle : null,
   });
   if (!session.ok) {
     return NextResponse.json({ ok: false, error: "invalid" }, { status: 403 });

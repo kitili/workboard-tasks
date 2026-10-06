@@ -1,9 +1,11 @@
 import { db } from "@/lib/db";
 import { allocateTaskKey } from "@/lib/board/task-key";
 import type { DepartmentSlug } from "@/lib/departments";
+import { repairStaffIdentities } from "@/lib/auth/staff-user";
 import {
   isOpenTapStatus,
   personMatchesTapOwner,
+  tapFirstNameIsShared,
   tapStatusToBoard,
   uniqueTapRosterPeople,
   TAP_DEPARTMENTS,
@@ -15,10 +17,18 @@ type TapUser = {
   name: string | null;
   username: string | null;
   email: string | null;
+  phone?: string | null;
   jobTitle: string | null;
   role: string;
   departmentSlug: string | null;
 };
+
+function isLiveStaff(user: TapUser) {
+  if (user.email) return true;
+  if (user.phone && !user.phone.startsWith("tap:")) return true;
+  if (user.username && !user.username.startsWith("tap-")) return true;
+  return false;
+}
 
 async function ensureWorkProject(organizationId: string) {
   const existing = await db.project.findFirst({
@@ -58,25 +68,26 @@ function departmentSupervisor(users: TapUser[], dept: TapDepartment) {
   );
 }
 
+function matchesTapPerson(user: TapUser, person: { name: string; slug: string; support?: boolean }) {
+  if (!personMatchesTapOwner(user, person.name)) return false;
+  if (person.support) return user.departmentSlug === person.slug;
+  if (tapFirstNameIsShared(person.name) && user.departmentSlug && user.departmentSlug !== person.slug) {
+    return false;
+  }
+  return true;
+}
+
 function alreadyOnRoster(users: TapUser[], person: { name: string; slug: string; support?: boolean }) {
-  return users.some((user) => {
-    if (!personMatchesTapOwner(user, person.name)) return false;
-    if (person.support) return user.departmentSlug === person.slug;
-    return true;
-  });
+  return users.some((user) => matchesTapPerson(user, person));
 }
 
 async function ensureTapPeople(organizationId: string, users: TapUser[]) {
   const created: TapUser[] = [];
   for (const person of uniqueTapRosterPeople()) {
-    const match = users.find((user) =>
-      person.support
-        ? personMatchesTapOwner(user, person.name) && user.departmentSlug === person.slug
-        : personMatchesTapOwner(user, person.name),
-    );
+    const match = users.find((user) => matchesTapPerson(user, person));
     if (match) {
-      const nextName = !person.support && match.name !== person.name ? person.name : undefined;
-      const nextTitle = person.role && !match.jobTitle ? person.role : undefined;
+      const nextName = !isLiveStaff(match) && match.name !== person.name ? person.name : undefined;
+      const nextTitle = !isLiveStaff(match) && person.role && !match.jobTitle ? person.role : undefined;
       if (nextName || nextTitle) {
         await db.user.update({
           where: { id: match.id },
@@ -106,16 +117,16 @@ async function ensureTapPeople(organizationId: string, users: TapUser[]) {
           jobTitle: person.role ?? (person.support ? "Department support" : null),
           role: "STAFF",
         },
-        select: { id: true, name: true, username: true, email: true, jobTitle: true, role: true, departmentSlug: true },
+        select: { id: true, name: true, username: true, email: true, phone: true, jobTitle: true, role: true, departmentSlug: true },
       });
       created.push(row);
       users.push(row);
     } catch {
       const existing = await db.user.findFirst({
         where: { organizationId, OR: [{ username }, { phone: `tap:${key}` }] },
-        select: { id: true, name: true, username: true, email: true, jobTitle: true, role: true, departmentSlug: true },
+        select: { id: true, name: true, username: true, email: true, phone: true, jobTitle: true, role: true, departmentSlug: true },
       });
-      if (existing) {
+      if (existing && !isLiveStaff(existing)) {
         await db.user.update({
           where: { id: existing.id },
           data: {
@@ -136,11 +147,13 @@ export async function syncTapTasks(organizationId: string, slug?: DepartmentSlug
     : TAP_DEPARTMENTS;
   if (departments.length === 0) return;
 
+  await repairStaffIdentities(organizationId);
+
   const [project, existingUsers, existing] = await Promise.all([
     ensureWorkProject(organizationId),
     db.user.findMany({
       where: { organizationId, isActive: true },
-      select: { id: true, name: true, username: true, email: true, jobTitle: true, role: true, departmentSlug: true },
+      select: { id: true, name: true, username: true, email: true, phone: true, jobTitle: true, role: true, departmentSlug: true },
     }),
     db.task.findMany({
       where: {
@@ -206,7 +219,11 @@ export async function syncTapTasks(organizationId: string, slug?: DepartmentSlug
         await db.task.deleteMany({ where: { id: { in: extras } } });
       }
       if (keep) {
-        const assigneeId = keep.assigneeId ?? assignee?.id ?? null;
+        const stillOwner = Boolean(
+          keep.assigneeId &&
+            (owners.some((owner) => owner.id === keep.assigneeId) || keep.assigneeId === supervisor?.id),
+        );
+        const assigneeId = stillOwner ? keep.assigneeId : (assignee?.id ?? keep.assigneeId ?? null);
         const same =
           keep.description === description &&
           keep.assigneeId === assigneeId &&

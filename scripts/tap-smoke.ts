@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { db } from "../src/lib/db";
 import { inferDepartment } from "../src/lib/departments";
-import { pickOpenTapItems, TAP_DEPARTMENTS, tapDepartment, tapPeople } from "../src/lib/data/tap-catalog";
+import { personMatchesTapOwner, pickOpenTapItems, TAP_DEPARTMENTS, tapDepartment, tapPeople } from "../src/lib/data/tap-catalog";
 import { getKpiDashboard } from "../src/lib/services/kpi";
 import { pickDailyTapLineup } from "../src/lib/today/tap-lineup";
 import { syncTapTasks } from "../src/lib/services/tap-sync";
@@ -9,7 +9,7 @@ import { noonHasPassed, selectDepartmentStaff, selectMissingDaily } from "../src
 import { syncAllUserDepartments } from "../src/lib/services/departments";
 
 const EXPECTED: Record<string, string[]> = {
-  "data-tech": ["Nelly Zablon", "Paul Gitigan Victor", "Mourine Kitili", "Onesmo", "Nehemia", "Katya"],
+  "data-tech": ["Nelly Zablon", "Paul Gitigan Victor", "Mourine Kitili", "Onesmo", "Nehemia", "Katya", "Irene Musau"],
   operations: ["Baraka Majundo", "Shikunzi", "Francis", "Kusaduka"],
   hr: ["Esther Mwalyego", "Valentina"],
   finance: ["Imani", "Dan", "Lilian"],
@@ -68,6 +68,26 @@ async function main() {
     "after-12 all-dept list skips phones and people with no department",
   );
   check(allMissing[0]?.departmentName === "DATA & TECH", "after-12 all-dept rows keep department names");
+  check(
+    personMatchesTapOwner({ name: "Irene Musau", email: "irene-fellow@silverleaf.co.tz" }, "Irene Didass Machange") === false,
+    "Irene Musau is not Irene Didass",
+  );
+  check(
+    personMatchesTapOwner({ name: "Irene Didass Machange" }, "Irene Didass Machange") === true,
+    "Irene Didass matches her own TAP name",
+  );
+  check(
+    inferDepartment({ name: "Irene Musau", email: "irene-fellow@silverleaf.co.tz", departmentSlug: "ilboru" }) === "data-tech",
+    "Irene Musau stays on DATA & TECH even if TAP sync parked her in Ilboru",
+  );
+  check(
+    inferDepartment({ name: "Irene Didass Machange" }) === "ilboru",
+    "Irene Didass stays on Ilboru",
+  );
+  check(
+    personMatchesTapOwner({ name: "Mourine Lauwo", email: "moureenlauwo@silverleaf.co.tz" }, "Mourine Kitili") === false,
+    "Mourine Lauwo is not Mourine Kitili",
+  );
   const showEveryone = selectDepartmentStaff(sample).map((row) => row.name);
   check(
     showEveryone.join() === "Francis,Mourine Kitili,Baraka,Julius Kimani",

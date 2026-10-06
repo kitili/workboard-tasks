@@ -98,8 +98,35 @@ const OWNER_DISPLAY: Record<string, string> = {
   neema: "Neema George Emanuel",
   grace: "Grace Kambona",
   irene: "Irene Didass Machange",
+  musau: "Irene Musau",
   krupa: "Krupa Patel",
 };
+
+const SHARED_FIRST_NAMES = new Set([
+  "irene",
+  "mourine",
+  "maureen",
+  "grace",
+  "neema",
+  "glory",
+  "agness",
+  "lilian",
+  "erick",
+  "eric",
+  "anna",
+  "david",
+  "elizabeth",
+  "george",
+  "jackson",
+  "joyce",
+  "leah",
+  "monica",
+  "salome",
+  "sayuni",
+  "veronica",
+  "happiness",
+  "daniel",
+]);
 
 function personText(person: DepartmentPerson) {
   return [person.name, person.username, person.email, person.jobTitle]
@@ -108,12 +135,19 @@ function personText(person: DepartmentPerson) {
     .toLowerCase();
 }
 
+function nameTokens(value: string) {
+  return value.toLowerCase().replace(/\./g, "").trim().split(/\s+/).filter(Boolean);
+}
+
 export function tapOwnerKey(name: string) {
   const value = name.toLowerCase().replace(/\./g, "").trim();
-  const first = value.split(/\s+/)[0] ?? value;
+  const parts = nameTokens(value);
+  const first = parts[0] ?? value;
+  const last = parts[parts.length - 1] ?? first;
   if (TEAM_OWNER.has(value) || TEAM_OWNER.has(first) || value.includes("team") || value.includes("department")) {
     return `team:${first}`;
   }
+  if (last === "musau") return "musau";
   if (first === "paul") return "paul";
   if (OWNER_DISPLAY[first]) return first;
   return first;
@@ -127,13 +161,39 @@ export function isTeamOwner(name: string) {
   return tapOwnerKey(name).startsWith("team:");
 }
 
+export function tapFirstNameIsShared(name: string) {
+  const first = nameTokens(name)[0] ?? "";
+  return SHARED_FIRST_NAMES.has(first) || SHARED_FIRST_NAMES.has(tapOwnerKey(name));
+}
+
 export function personMatchesTapOwner(person: DepartmentPerson, owner: string) {
   if (isTeamOwner(owner)) return false;
+  const ownerParts = nameTokens(owner);
+  const ownerFirst = ownerParts[0];
+  if (!ownerFirst) return false;
   const key = tapOwnerKey(owner);
+  if (!key || key.startsWith("team:")) return false;
+
+  const expectedLast = ownerParts.length > 1 ? ownerParts.slice(1) : nameTokens(OWNER_DISPLAY[key] ?? owner).slice(1);
+  const personParts = nameTokens(person.name ?? "");
+  const personLast = personParts.slice(1);
   const text = personText(person);
-  if (!text || !key) return false;
-  if (key === "paul") return /\bpaul\b/.test(text);
-  return new RegExp(`\\b${key}\\b`, "i").test(text);
+  if (!text) return false;
+  const firstHits =
+    personParts[0] === ownerFirst ||
+    personParts[0] === key ||
+    new RegExp(`\\b${ownerFirst}\\b`, "i").test(text) ||
+    (key === "paul" && /\bpaul\b/.test(text));
+  if (!firstHits) return false;
+
+  if (expectedLast.length && personLast.length) {
+    return expectedLast.some((token) => personLast.includes(token));
+  }
+  if (SHARED_FIRST_NAMES.has(ownerFirst) || SHARED_FIRST_NAMES.has(key)) {
+    if (personLast.length) return false;
+    if (person.email) return false;
+  }
+  return true;
 }
 
 export function isOpenTapStatus(status: TapStatus) {
