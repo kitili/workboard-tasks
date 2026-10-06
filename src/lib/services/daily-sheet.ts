@@ -139,6 +139,7 @@ export async function getTodaySheet(organizationId?: string) {
   if (!org) return { people: [], date: startOfDay(new Date()).toISOString() };
 
   await parkUnfinishedDailyTasks(org.id);
+  await attachMissingDailyCards(org.id);
   const planDate = startOfDay(new Date());
   const people = await db.user.findMany({
     where: { organizationId: org.id, isActive: true },
@@ -352,6 +353,7 @@ export async function saveTodaySlots(
     const current = existing.find((item) => item.slot === line);
     if (current) {
       let nextTaskId = current.taskId;
+      let lineTitle = title;
       if (slot.taskId && slot.taskId !== current.taskId) {
         const picked = await db.task.findFirst({
           where: {
@@ -364,31 +366,32 @@ export async function saveTodaySlots(
             await db.task.delete({ where: { id: current.taskId } }).catch(() => undefined);
           }
           nextTaskId = picked.id;
+          lineTitle = picked.title;
         }
+      }
+      if (!nextTaskId) {
+        const project = await ensureWorkProject(user.organizationId);
+        const created = await createDailyCard({
+          organizationId: user.organizationId,
+          projectId: project.id,
+          userId,
+          departmentSlug: user.departmentSlug,
+          title: lineTitle,
+          slot: line,
+          priority: slot.priority ?? null,
+        });
+        nextTaskId = created.id;
+      } else if (nextTaskId === current.taskId) {
+        await db.task.update({
+          where: { id: nextTaskId },
+          data: { title: lineTitle, priority: slot.priority ?? current.task?.priority ?? null },
+        });
       }
       await db.dailyPlanItem.update({
         where: { id: current.id },
-        data: { title, taskId: nextTaskId },
+        data: { title: lineTitle, taskId: nextTaskId },
       });
-      if (nextTaskId && !slot.taskId) {
-        await db.task.update({
-          where: { id: nextTaskId },
-          data: { title, priority: slot.priority ?? current.task?.priority ?? null },
-        });
-      }
-      if (line === 4 || line === 5) {
-        const kind = line === 4 ? "CHALLENGE" : "PROGRESS";
-        const note = await db.progressUpdate.findFirst({
-          where: { authorId: userId, planDate, kind },
-          orderBy: { createdAt: "desc" },
-        });
-        if (note) await db.progressUpdate.update({ where: { id: note.id }, data: { body: title } });
-        else {
-          await db.progressUpdate.create({
-            data: { organizationId: user.organizationId, authorId: userId, body: title, planDate, kind },
-          });
-        }
-      }
+      if (line === 4 || line === 5) await upsertLineNote(user.organizationId, userId, planDate, line, lineTitle);
       continue;
     }
     if (slot.taskId) {
@@ -454,45 +457,19 @@ export async function addTodayTask(
   }
 
   if (slot === 4 || slot === 5) {
-    await db.progressUpdate.create({
-      data: {
-        organizationId: user.organizationId,
-        authorId: userId,
-        body: title,
-        planDate,
-        kind: slot === 4 ? "CHALLENGE" : "PROGRESS",
-      },
-    });
-    await db.dailyPlanItem.create({
-      data: {
-        dailyPlanId: plan.id,
-        slot,
-        title,
-        status: "BACKLOG",
-      },
-    });
-    return null;
+    await upsertLineNote(user.organizationId, userId, planDate, slot, title);
   }
 
   const status = input.status ?? "TODO";
-  const taskKey = await allocateTaskKey(project.id);
-
-  const task = await db.task.create({
-    data: {
-      organizationId: user.organizationId,
-      projectId: project.id,
-      assigneeId: userId,
-      authorId: userId,
-      moveOwnerId: userId,
-      taskKey,
-      title,
-      status,
-      priority: input.priority,
-      source: "DAILY",
-      departmentSlug: user.departmentSlug,
-      columnOrder: slot,
-      completedAt: status === "COMPLETED" ? new Date() : null,
-    },
+  const task = await createDailyCard({
+    organizationId: user.organizationId,
+    projectId: project.id,
+    userId,
+    departmentSlug: user.departmentSlug,
+    title,
+    slot,
+    priority: input.priority,
+    status,
   });
 
   await db.dailyPlanItem.create({
@@ -563,4 +540,104 @@ export async function syncDailyItemStatus(taskId: string, status: TaskStatus) {
       completedAt: status === "COMPLETED" ? new Date() : null,
     },
   });
+}
+
+export async function syncDailyItemTitle(taskId: string, title: string) {
+  const item = await db.dailyPlanItem.findUnique({
+    where: { taskId },
+    include: { dailyPlan: { select: { userId: true, planDate: true, user: { select: { organizationId: true } } } } },
+  });
+  if (!item) return;
+  await db.dailyPlanItem.update({ where: { id: item.id }, data: { title } });
+  if (item.slot === 4 || item.slot === 5) {
+    await upsertLineNote(item.dailyPlan.user.organizationId, item.dailyPlan.userId, item.dailyPlan.planDate, item.slot, title);
+  }
+}
+
+async function upsertLineNote(
+  organizationId: string,
+  userId: string,
+  planDate: Date,
+  slot: number,
+  body: string,
+) {
+  const kind = slot === 4 ? "CHALLENGE" : "PROGRESS";
+  const note = await db.progressUpdate.findFirst({
+    where: { authorId: userId, planDate, kind },
+    orderBy: { createdAt: "desc" },
+  });
+  if (note) await db.progressUpdate.update({ where: { id: note.id }, data: { body } });
+  else {
+    await db.progressUpdate.create({
+      data: { organizationId, authorId: userId, body, planDate, kind },
+    });
+  }
+}
+
+async function createDailyCard(input: {
+  organizationId: string;
+  projectId: string;
+  userId: string;
+  departmentSlug: string | null;
+  title: string;
+  slot: number;
+  priority: TaskPriority | null;
+  status?: TaskStatus;
+}) {
+  const status = input.status ?? "TODO";
+  const taskKey = await allocateTaskKey(input.projectId);
+  return db.task.create({
+    data: {
+      organizationId: input.organizationId,
+      projectId: input.projectId,
+      assigneeId: input.userId,
+      authorId: input.userId,
+      moveOwnerId: input.userId,
+      taskKey,
+      title: input.title,
+      status,
+      priority: input.priority,
+      source: "DAILY",
+      departmentSlug: input.departmentSlug,
+      labels: input.slot === 4 ? ["Challenge"] : input.slot === 5 ? ["Progress recap"] : [],
+      columnOrder: input.slot,
+      completedAt: status === "COMPLETED" ? new Date() : null,
+    },
+  });
+}
+
+async function attachMissingDailyCards(organizationId: string) {
+  const planDate = startOfDay(new Date());
+  const missing = await db.dailyPlanItem.findMany({
+    where: {
+      taskId: null,
+      slot: { gte: 1, lte: 5 },
+      dailyPlan: { planDate, user: { organizationId } },
+    },
+    include: {
+      dailyPlan: {
+        select: { userId: true, user: { select: { departmentSlug: true } } },
+      },
+    },
+  });
+  if (missing.length === 0) return;
+  const project = await ensureWorkProject(organizationId);
+  for (const item of missing) {
+    const title = item.title.trim();
+    if (!title) continue;
+    const task = await createDailyCard({
+      organizationId,
+      projectId: project.id,
+      userId: item.dailyPlan.userId,
+      departmentSlug: item.dailyPlan.user.departmentSlug,
+      title,
+      slot: item.slot,
+      priority: null,
+      status: "TODO",
+    });
+    await db.dailyPlanItem.update({
+      where: { id: item.id },
+      data: { taskId: task.id, status: "TODO" },
+    });
+  }
 }

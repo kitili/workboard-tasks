@@ -51,7 +51,9 @@ export function TodayForm({
   const [saving, setSaving] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [notice, setNotice] = useState(
-    filed ? "Swap a TAP in, write a line, or take one out. Save when it feels right." : "Drag a TAP into 1, 2 or 3 — or tap it.",
+    filed
+      ? "These lines are already on your board. Edit them here and save — the cards follow."
+      : "Drag a TAP into 1, 2 or 3 — or tap it.",
   );
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -133,7 +135,7 @@ export function TodayForm({
       setError(data.error ?? "Could not keep those tasks");
       return;
     }
-    setNotice("Kept. Your board has the same words.");
+    setNotice("Kept. Each line is a card on your board, and you can still edit it here.");
     router.refresh();
   }
 

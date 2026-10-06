@@ -6,7 +6,7 @@ import { canSeeDepartment } from "@/lib/departments";
 import { getSessionUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { getTaskDetail } from "@/lib/data/board";
-import { syncDailyItemStatus } from "@/lib/services/daily-sheet";
+import { syncDailyItemStatus, syncDailyItemTitle } from "@/lib/services/daily-sheet";
 
 const updateSchema = z.object({
   title: z.string().min(1).optional(),
@@ -122,6 +122,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         _count: { select: { comments: true } },
       },
     });
+
+    if (body.title && body.title !== existing.title) {
+      await syncDailyItemTitle(task.id, body.title);
+    }
 
     if (body.status && body.status !== existing.status) {
       await syncDailyItemStatus(task.id, body.status);
