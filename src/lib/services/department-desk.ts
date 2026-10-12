@@ -7,6 +7,7 @@ import {
   deskCatalogPeople,
   departmentTapCatalog,
   tapItemBelongsOnOpsDesk,
+  tapOwnerKey,
   tapPeople,
   type TapItem,
 } from "@/lib/data/tap-catalog";
@@ -110,11 +111,19 @@ export async function getDepartmentTapDesk(organizationId: string, slug: DeskSlu
   ]);
 
   const catalogRoles = new Map(tapPeople(slug).map((person) => [person.name.toLowerCase(), person.role]));
+  const ranked = [...team].sort((a, b) => {
+    const score = (row: (typeof team)[number]) => (row.email ? 4 : 0) + (row.username && !row.username.startsWith("tap-") ? 2 : 0);
+    return score(b) - score(a);
+  });
   const people: DeskPerson[] = [];
-  for (const row of team) {
+  const seen = new Set<string>();
+  for (const row of ranked) {
     const label = row.name?.trim() || row.username || "Staff";
     if (!isNamedStaff(label)) continue;
     const display = slug === "operations" ? opsDeskPersonLabel(row) ?? label : label;
+    const key = tapOwnerKey(display);
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
     people.push({
       id: row.id,
       name: display,
