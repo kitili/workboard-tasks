@@ -4,6 +4,8 @@ import { canViewDesk, deskTitle } from "@/lib/auth/desk";
 import { getDefaultOrganization } from "@/lib/data/dashboard";
 import { deskPermissions, getDepartmentTapDesk } from "@/lib/services/department-desk";
 import { DepartmentTapDesk } from "@/components/desk/department-tap-desk";
+import { sheetDeskBlurb } from "@/lib/board/sheet-status";
+import { preferredCompletedWord } from "@/lib/data/tap-catalog";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +21,7 @@ export default async function MarketingTapPage() {
     <DepartmentTapDesk
       slug="marketing"
       title={deskTitle("marketing")}
-      blurb="Kilusu, Erick, and Mariam all sit on this desk. Pick TAP onto today’s 1–5s, share or allocate cards inside marketing, and drag your own cards to Backlog, To do, Doing, or Done."
+      blurb={`Kilusu, Erick, and Mariam all sit on this desk. Pick TAP onto today’s 1–5s and share or allocate cards inside marketing. ${sheetDeskBlurb(preferredCompletedWord("marketing"))}`}
       viewerId={session.id}
       groups={desk.groups}
       people={desk.people}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { format } from "date-fns";
 import {
   DndContext,
@@ -14,6 +14,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import type { DeskAllocation, DeskCard, DeskLine, DeskPerson } from "@/lib/services/department-desk";
 import type { DeskSlug } from "@/lib/auth/desk";
+import { Pager } from "@/components/pager";
 
 type Group = {
   slug: string;
@@ -37,12 +38,23 @@ const WASH: Record<string, string> = {
 };
 
 const PERSON_COLORS = ["#002368", "#C45C26", "#5B4B8A", "#1F6B4A", "#9B2C2C", "#0F6C8C"];
+const CARD_PAGE_SIZE = 8;
+const ROCK_PAGE_SIZE = 5;
 
-const STATUSES = [
-  { value: "BACKLOG", label: "Backlog", wash: "#F3EEFF" },
-  { value: "TODO", label: "To do", wash: "#D9ECF9" },
-  { value: "IN_PROGRESS", label: "Doing", wash: "#FFF7E5" },
-  { value: "COMPLETED", label: "Done", wash: "#E8F7F1" },
+const SHEET_DESK_COLUMNS = [
+  { value: "TODO", label: "On Schedule", wash: "#D9ECF9", tapStatus: "On Schedule" },
+  { value: "IN_PROGRESS", label: "Ongoing", wash: "#FFF7E5", tapStatus: "Ongoing" },
+  { value: "BACKLOG", label: "Not Started", wash: "#ECECEC", tapStatus: "Not Started" },
+  { value: "COMPLETED", label: "Fully Completed", wash: "#002368", tapStatus: "Fully Completed" },
+] as const;
+
+const SHEET_DESK_PHRASES = [
+  { value: "TODO", label: "On Schedule", wash: "#D9ECF9", tapStatus: "On Schedule" },
+  { value: "IN_PROGRESS", label: "Ongoing", wash: "#FFF7E5", tapStatus: "Ongoing" },
+  { value: "IN_PROGRESS", label: "Partially Completed", wash: "#FFF7E5", tapStatus: "Partially Completed" },
+  { value: "IN_PROGRESS", label: "Behind Schedule", wash: "#FFF0D9", tapStatus: "Behind Schedule" },
+  { value: "BACKLOG", label: "Not Started", wash: "#ECECEC", tapStatus: "Not Started" },
+  { value: "COMPLETED", label: "Fully Completed", wash: "#002368", tapStatus: "Fully Completed" },
 ] as const;
 
 function dayValue(iso: string | null) {
@@ -109,6 +121,8 @@ export function DepartmentTapDesk({
   const [notice, setNotice] = useState("");
   const [pending, setPending] = useState<string | null>(null);
   const [open, setOpen] = useState<Record<string, boolean>>({ [slug]: true, operations: true });
+  const [rockPage, setRockPage] = useState<Record<string, number>>({});
+  const [droppedId, setDroppedId] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   function applyDesk(next: { groups?: Group[]; allocations?: DeskAllocation[]; people?: DeskPerson[]; myCards?: DeskCard[] }) {
@@ -165,7 +179,7 @@ export function DepartmentTapDesk({
     setNotice("Taken off today’s three.");
   }
 
-  async function patchLine(taskId: string, body: { dueDate?: string | null; status?: string; shareWith?: string; assigneeId?: string | null }) {
+  async function patchLine(taskId: string, body: { dueDate?: string | null; status?: string; tapStatus?: string; shareWith?: string; assigneeId?: string | null }) {
     setPending(taskId);
     setNotice("");
     const res = await fetch(`/api/desk/${slug}/tasks/${taskId}`, {
@@ -180,19 +194,30 @@ export function DepartmentTapDesk({
       return;
     }
     if (data.desk) applyDesk(data.desk);
-    setNotice(body.status ? "Card moved." : body.shareWith ? "Shared with the team." : "Kept.");
+    setNotice(body.tapStatus ? `Sheet says ${body.tapStatus}.` : body.status ? "Card moved." : body.shareWith ? "Shared with the team." : "Kept.");
   }
 
   async function onCardDrop(event: DragEndEvent) {
     const taskId = String(event.active.id);
     const over = event.over?.id ? String(event.over.id) : "";
-    const next = STATUSES.find((item) => item.value === over);
+    const next = SHEET_DESK_COLUMNS.find((item) => item.value === over);
     const card = cards.find((item) => item.id === taskId);
     if (!next || !card || boardStatus(card.status) === next.value) return;
+    if (boardStatus(card.status) === "COMPLETED") {
+      setNotice("That card is already done. It stays completed.");
+      return;
+    }
+    if (next.value === "TODO" && boardStatus(card.status) !== "TODO") {
+      setNotice("That card has already been touched. It does not go back to untouched tasks.");
+      return;
+    }
+    setDroppedId(taskId);
     setCards((current) => current.map((item) => (item.id === taskId ? { ...item, status: next.value } : item)));
     await patchLine(taskId, { status: next.value });
   }
 
+  const pile = SHEET_DESK_COLUMNS;
+  const phrases = SHEET_DESK_PHRASES;
   const lines = desk.flatMap((group) => group.rocks.flatMap((rock) => [rock.parent, ...rock.children]));
   const done = lines.filter((line) => boardStatus(line.status) === "COMPLETED").length;
   const mine = useMemo(() => {
@@ -204,7 +229,7 @@ export function DepartmentTapDesk({
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <header className="overflow-hidden rounded-[2rem] bg-[#002368] px-6 py-6 text-white shadow-sm">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#80BFEC]">{slug === "operations" ? "Cluster operations" : slug === "hr" ? "Human resource" : "Marketing & partnership"}</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#80BFEC]">{slug === "operations" ? "Cluster operations" : slug === "hr" ? "Human resource" : slug === "data-tech" ? "Data & Tech" : "Marketing & partnership"}</p>
         <h2 className="mt-1 text-3xl font-semibold" style={{ color: "#ffffff" }}>
           {title}
         </h2>
@@ -272,11 +297,18 @@ export function DepartmentTapDesk({
 
       <section className="rounded-[1.8rem] bg-white p-4 shadow-sm ring-1 ring-[#002368]/10">
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#002368]">My TAP cards</p>
-        <p className="mt-1 text-sm text-[#4f555f]">Only your cards. Drag them to Backlog, To do, Doing, or Done.</p>
+        <p className="mt-1 text-sm text-[#4f555f]">Only your cards. Drag them to On Schedule, Ongoing, Not Started, or Fully Completed.</p>
         <DndContext sensors={sensors} onDragEnd={(event) => void onCardDrop(event)}>
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {STATUSES.map((column) => (
-              <CardColumn key={column.value} status={column.value} label={column.label} wash={column.wash} cards={mine[column.value] ?? []} />
+            {pile.map((column) => (
+              <CardColumn
+                key={column.value}
+                status={column.value}
+                label={column.label}
+                wash={column.wash}
+                cards={mine[column.value] ?? []}
+                focusId={droppedId}
+              />
             ))}
           </div>
         </DndContext>
@@ -301,8 +333,11 @@ export function DepartmentTapDesk({
               </span>
             </button>
             {revealed ? (
-              <div className="divide-y divide-[#002368]/8">
-                {group.rocks.map((rock) => (
+              <RockPages
+                rocks={group.rocks}
+                page={rockPage[group.slug] ?? 1}
+                onPage={(page) => setRockPage((current) => ({ ...current, [group.slug]: page }))}
+                renderRock={(rock) => (
                   <div key={`${group.slug}-${rock.parent.code}`} className="px-3 py-3 sm:px-4">
                     <LineRow
                       line={rock.parent}
@@ -314,8 +349,9 @@ export function DepartmentTapDesk({
                       pending={pending}
                       onAssign={assign}
                       onDeadline={(taskId, dueDate) => void patchLine(taskId, { dueDate })}
-                      onStatus={(taskId, status) => void patchLine(taskId, { status })}
+                      onStatus={(taskId, status, tapStatus) => void patchLine(taskId, { status, tapStatus })}
                       onShare={(taskId, userId) => void patchLine(taskId, { shareWith: userId })}
+                      phrases={phrases}
                     />
                     {rock.children.length ? (
                       <div className="mt-2 space-y-2 border-l-4 border-[#80BFEC] pl-3 sm:pl-4">
@@ -330,15 +366,16 @@ export function DepartmentTapDesk({
                             pending={pending}
                             onAssign={assign}
                             onDeadline={(taskId, dueDate) => void patchLine(taskId, { dueDate })}
-                            onStatus={(taskId, status) => void patchLine(taskId, { status })}
+                            onStatus={(taskId, status, tapStatus) => void patchLine(taskId, { status, tapStatus })}
                             onShare={(taskId, userId) => void patchLine(taskId, { shareWith: userId })}
+                            phrases={phrases}
                           />
                         ))}
                       </div>
                     ) : null}
                   </div>
-                ))}
-              </div>
+                )}
+              />
             ) : null}
           </section>
         );
@@ -352,22 +389,64 @@ function CardColumn({
   label,
   wash,
   cards,
+  focusId,
 }: {
   status: string;
   label: string;
   wash: string;
   cards: DeskCard[];
+  focusId?: string | null;
 }) {
+  const [page, setPage] = useState(1);
+  const pages = Math.max(1, Math.ceil(cards.length / CARD_PAGE_SIZE));
+  const safePage = Math.min(page, pages);
+  const start = (safePage - 1) * CARD_PAGE_SIZE;
+  const visible = cards.slice(start, start + CARD_PAGE_SIZE);
   const { setNodeRef, isOver } = useDroppable({ id: status });
+
+  useEffect(() => {
+    if (!focusId) return;
+    const index = cards.findIndex((card) => card.id === focusId);
+    if (index >= 0) setPage(Math.floor(index / CARD_PAGE_SIZE) + 1);
+  }, [focusId, cards]);
+
   return (
     <div ref={setNodeRef} className="rounded-2xl p-3" style={{ background: wash, outline: isOver ? "2px solid #002368" : undefined }}>
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#002368]">
         {label} · {cards.length}
       </p>
       <div className="mt-2 space-y-2 min-h-[4.5rem]">
-        {cards.map((card) => (
+        {visible.map((card) => (
           <MineCard key={card.id} card={card} />
         ))}
+      </div>
+      <div className="mt-3">
+        <Pager page={safePage} pages={pages} onPage={setPage} />
+      </div>
+    </div>
+  );
+}
+
+function RockPages({
+  rocks,
+  page,
+  onPage,
+  renderRock,
+}: {
+  rocks: Array<{ parent: DeskLine; children: DeskLine[] }>;
+  page: number;
+  onPage: (page: number) => void;
+  renderRock: (rock: { parent: DeskLine; children: DeskLine[] }) => ReactNode;
+}) {
+  const pages = Math.max(1, Math.ceil(rocks.length / ROCK_PAGE_SIZE));
+  const safePage = Math.min(page, pages);
+  const start = (safePage - 1) * ROCK_PAGE_SIZE;
+  const visible = rocks.slice(start, start + ROCK_PAGE_SIZE);
+  return (
+    <div>
+      <div className="divide-y divide-[#002368]/8">{visible.map((rock) => renderRock(rock))}</div>
+      <div className="px-4 py-3">
+        <Pager page={safePage} pages={pages} onPage={onPage} />
       </div>
     </div>
   );
@@ -460,6 +539,7 @@ function LineRow({
   onDeadline,
   onStatus,
   onShare,
+  phrases,
 }: {
   line: DeskLine;
   rock?: boolean;
@@ -470,7 +550,8 @@ function LineRow({
   pending: string | null;
   onAssign: (taskId: string, userId: string) => void;
   onDeadline: (taskId: string, dueDate: string) => void;
-  onStatus: (taskId: string, status: string) => void;
+  onStatus: (taskId: string, status: string, tapStatus?: string) => void;
+  phrases: ReadonlyArray<{ value: string; label: string; wash: string; tapStatus: string }>;
   onShare: (taskId: string, userId: string) => void;
 }) {
   const owners = [...line.owners, ...line.helpers].filter(Boolean);
@@ -500,16 +581,20 @@ function LineRow({
         ) : null}
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
-        {STATUSES.map((item) => {
-          const active = currentStatus === item.value;
+        {phrases.map((item) => {
+          const active = item.tapStatus ? line.sheetStatus === item.tapStatus : currentStatus === item.value;
+          const locked = currentStatus === "COMPLETED" || (item.value === "TODO" && currentStatus !== "TODO");
           return (
             <button
-              key={item.value}
+              key={item.tapStatus || item.value}
               type="button"
-              disabled={!canEditStatus || !live || busy}
-              onClick={() => line.taskId && onStatus(line.taskId, item.value)}
+              disabled={!canEditStatus || !live || busy || locked}
+              onClick={() => line.taskId && onStatus(line.taskId, item.value, item.tapStatus || undefined)}
               className="rounded-full px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
-              style={{ background: active ? "#002368" : item.wash, color: active ? "white" : "#002368" }}
+              style={{
+                background: active ? "#002368" : item.wash,
+                color: active || item.wash === "#002368" ? "white" : "#002368",
+              }}
             >
               {item.label}
             </button>

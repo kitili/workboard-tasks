@@ -13,6 +13,8 @@ import {
 } from "@/lib/data/tap-catalog";
 import { db } from "@/lib/db";
 import { isAllowedStaffEmail, normalizeStaffEmail } from "@/lib/email";
+import { sheetCardPhrase } from "@/lib/board/sheet-status";
+import { taskForTapLine } from "@/lib/board/tap-match";
 import { syncTapTasks } from "@/lib/services/tap-sync";
 
 export type DeskPerson = { id: string; name: string; role: string | null; departmentSlug: string | null };
@@ -39,6 +41,7 @@ export type DeskLine = {
   helpers: string[];
   owned: boolean;
   catalogStatus: string;
+  sheetStatus: string | null;
   originalDeadline: string | null;
   taskId: string | null;
   status: string;
@@ -51,6 +54,9 @@ type BoardTap = {
   id: string;
   title: string;
   status: string;
+  description: string | null;
+  labels: string[];
+  source: string;
   departmentSlug: string | null;
   dueDate: Date | null;
   assigneeId: string | null;
@@ -77,14 +83,19 @@ export async function getDepartmentTapDesk(organizationId: string, slug: DeskSlu
     db.task.findMany({
       where: {
         organizationId,
-        labels: { has: "TAP" },
-        departmentSlug: { in: slugs },
         status: { not: "CANCELLED" },
+        OR: [
+          { labels: { has: "TAP" }, departmentSlug: { in: slugs } },
+          { source: "DAILY", departmentSlug: { in: slugs } },
+        ],
       },
       select: {
         id: true,
         title: true,
         status: true,
+        description: true,
+        labels: true,
+        source: true,
         departmentSlug: true,
         dueDate: true,
         assigneeId: true,
@@ -287,8 +298,7 @@ function hydrateLine(
   crew: DeskPerson[],
   deskSlug: DeskSlug,
 ): DeskLine {
-  const title = `${item.code} ${item.title}`;
-  const task = tasks.find((row) => row.departmentSlug === itemSlug && row.title === title);
+  const task = taskForTapLine(tasks, itemSlug, item.code, item.title);
   const onToday = task?.dailyItem && task.dailyItem.dailyPlan.planDate.getTime() === today.getTime();
   const todayPerson = onToday && task?.dailyItem ? task.dailyItem.dailyPlan.user.name : null;
   const todayLabel = todayPerson
@@ -301,6 +311,7 @@ function hydrateLine(
     owners: item.owners,
     helpers: item.helpers ?? [],
     catalogStatus: item.status,
+    sheetStatus: task ? sheetCardPhrase(task.status, task.description, task.departmentSlug) : item.status,
     owned,
     originalDeadline: item.deadline ?? null,
     taskId: task?.id ?? null,

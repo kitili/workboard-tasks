@@ -13,6 +13,19 @@ export function isRealLogin(phone?: string | null) {
   return /^\d{9,}$/.test(phone.replace(/\D/g, "")) || phone.startsWith("mail:");
 }
 
+export function eatHour(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Dar_es_Salaam",
+    hour: "numeric",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  return Number(parts.find((part) => part.type === "hour")?.value ?? "0");
+}
+
+export function sixPmHasPassed(now = new Date()) {
+  return eatHour(now) >= 18;
+}
+
 export function noonHasPassed(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Africa/Dar_es_Salaam",

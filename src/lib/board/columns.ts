@@ -45,6 +45,19 @@ export function phaseStyle(status: string) {
   return BOARD_COLUMNS.find((column) => column.id === id) ?? BOARD_COLUMNS[2];
 }
 
+/** Once a card leaves untouched Tasks, it does not go back there. */
+export function returnToTasksError(from: string, to: string) {
+  const source = columnForStatus(from);
+  const target = columnForStatus(to);
+  if (source === "COMPLETED" && target !== "COMPLETED") {
+    return "That card is already done. It stays completed.";
+  }
+  if (target === "TODO" && source !== "TODO") {
+    return "That card has already been touched. It can go to backlog or in progress, not back to untouched tasks.";
+  }
+  return null;
+}
+
 /** Older statuses still land in a visible stack. */
 export function columnForStatus(status: string): TaskStatus {
   if (status === "IN_REVIEW" || status === "BLOCKED") return "IN_PROGRESS";

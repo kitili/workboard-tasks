@@ -4,28 +4,23 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-function linksFor({
-  admin,
+function desksFor({
   opsDesk,
   hrDesk,
   marketingDesk,
+  dataTechDesk,
 }: {
-  admin: boolean;
   opsDesk?: boolean;
   hrDesk?: boolean;
   marketingDesk?: boolean;
-  departmentName?: string | null;
+  dataTechDesk?: boolean;
 }) {
-  const links = [{ href: "/today", label: "1-5's" }];
-  if (opsDesk) links.push({ href: "/ops", label: "Ops TAP" });
-  if (hrDesk) links.push({ href: "/hr", label: "HR TAP" });
-  if (marketingDesk) links.push({ href: "/marketing", label: "Marketing TAP" });
-  if (admin) {
-    links.push({ href: "/board", label: "Admin board" }, { href: "/kpi", label: "KPI" }, { href: "/updates", label: "Updates" });
-  } else {
-    links.push({ href: "/board", label: "My board" }, { href: "/updates", label: "My updates" });
-  }
-  return links;
+  return [
+    opsDesk ? { href: "/ops", label: "Ops" } : null,
+    hrDesk ? { href: "/hr", label: "HR" } : null,
+    marketingDesk ? { href: "/marketing", label: "Marketing" } : null,
+    dataTechDesk ? { href: "/data-tech", label: "Data & Tech" } : null,
+  ].filter((item): item is { href: string; label: string } => Boolean(item));
 }
 
 type SessionUser = {
@@ -41,7 +36,7 @@ export function Nav({
   opsDesk = false,
   hrDesk = false,
   marketingDesk = false,
-  departmentName = null,
+  dataTechDesk = false,
 }: {
   user: SessionUser;
   unreadUpdates?: number;
@@ -49,15 +44,42 @@ export function Nav({
   opsDesk?: boolean;
   hrDesk?: boolean;
   marketingDesk?: boolean;
+  dataTechDesk?: boolean;
   departmentName?: string | null;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const links = linksFor({ admin, opsDesk, hrDesk, marketingDesk, departmentName });
+  const [desksOpen, setDesksOpen] = useState(false);
+  const desks = desksFor({ opsDesk, hrDesk, marketingDesk, dataTechDesk });
+  const links = admin
+    ? [
+        { href: "/today", label: "1-5's" },
+        { href: "/board", label: "Admin board" },
+        { href: "/kpi", label: "KPI" },
+        { href: "/updates", label: "Updates" },
+      ]
+    : [
+        { href: "/today", label: "1-5's" },
+        ...(desks.length === 1 ? desks : []),
+        { href: "/board", label: "My board" },
+        { href: "/updates", label: "My updates" },
+      ];
+  const deskMenu = desks.length > 1 ? desks : [];
+  const deskHere = deskMenu.some((desk) => pathname === desk.href || pathname.startsWith(`${desk.href}/`));
 
   useEffect(() => {
     setOpen(false);
+    setDesksOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    if (!desksOpen) return;
+    function close() {
+      setDesksOpen(false);
+    }
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [desksOpen]);
 
   const initial = (user.name ?? user.username ?? "?").slice(0, 1).toUpperCase();
 
@@ -82,8 +104,36 @@ export function Nav({
       </button>
 
       <div className="site-nav__links">
-        {links.map((link) => (
-          <Link key={link.href} href={link.href}>
+        {links.slice(0, 1).map((link) => (
+          <Link key={link.href} href={link.href} aria-current={pathname === link.href ? "page" : undefined}>
+            {link.label}
+          </Link>
+        ))}
+        {deskMenu.length ? (
+          <div className="site-nav__menu" data-open={desksOpen || undefined}>
+            <button
+              type="button"
+              className="site-nav__menu-button"
+              aria-expanded={desksOpen}
+              aria-current={deskHere ? "page" : undefined}
+              onClick={(event) => {
+                event.stopPropagation();
+                setDesksOpen((value) => !value);
+              }}
+            >
+              Departments
+            </button>
+            <div className="site-nav__menu-panel">
+              {deskMenu.map((desk) => (
+                <Link key={desk.href} href={desk.href} aria-current={pathname === desk.href ? "page" : undefined}>
+                  {desk.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        {links.slice(1).map((link) => (
+          <Link key={link.href} href={link.href} aria-current={pathname === link.href ? "page" : undefined}>
             {link.label}
             {link.href === "/updates" && unreadUpdates > 0 ? (
               <span className="site-nav__badge">{unreadUpdates > 9 ? "9+" : unreadUpdates}</span>

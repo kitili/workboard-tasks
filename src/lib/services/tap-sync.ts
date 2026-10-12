@@ -220,7 +220,7 @@ export async function syncTapTasks(organizationId: string, slug?: DepartmentSlug
       if (extras.length) {
         await db.task.deleteMany({ where: { id: { in: extras } } });
       }
-      const liveTap = keep ? boardStatusToTap(keep.status, item.status) : item.status;
+      const liveTap = keep ? boardStatusToTap(keep.status, item.status, dept.slug) : item.status;
       const description = tapSheetLine(dept, item, liveTap);
       if (keep) {
         const liveAssignee =
@@ -236,7 +236,10 @@ export async function syncTapTasks(organizationId: string, slug?: DepartmentSlug
           keep.labels.includes("TAP") &&
           keep.labels.includes(`Rock ${item.code}`) &&
           (keep.dueDate?.toISOString() ?? null) === (nextDue?.toISOString() ?? null);
-        if (!same) {
+        const sealCompleted =
+          (item.status === "Fully Completed" || item.status === "Completed") &&
+          (keep.status === "TODO" || keep.status === "BACKLOG");
+        if (!same || sealCompleted) {
           await db.task.update({
             where: { id: keep.id },
             data: {
@@ -247,6 +250,7 @@ export async function syncTapTasks(organizationId: string, slug?: DepartmentSlug
               sharedWithIds: nextShared,
               labels: ["TAP", `Rock ${item.code}`],
               dueDate: nextDue,
+              ...(sealCompleted ? { status: "COMPLETED" as const, completedAt: new Date() } : {}),
             },
           });
         }

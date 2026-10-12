@@ -230,8 +230,16 @@ export function tapStatusToBoard(status: TapStatus) {
   return "TODO" as const;
 }
 
-export function boardStatusToTap(status: string, fallback: TapStatus = "On Schedule"): TapStatus {
-  if (status === "COMPLETED") return "Fully Completed";
+export function preferredCompletedWord(slug?: string | null): "Fully Completed" | "Completed" {
+  const dept = TAP_DEPARTMENTS.find((item) => item.slug === slug);
+  if (!dept) return "Fully Completed";
+  const statuses = new Set(dept.items.map((item) => item.status));
+  if (statuses.has("Completed") && !statuses.has("Fully Completed")) return "Completed";
+  return "Fully Completed";
+}
+
+export function boardStatusToTap(status: string, fallback: TapStatus = "On Schedule", departmentSlug?: string | null): TapStatus {
+  if (status === "COMPLETED") return preferredCompletedWord(departmentSlug);
   if (status === "BACKLOG") return "Not Started";
   if (status === "BLOCKED") return "Behind Schedule";
   if (status === "IN_PROGRESS" || status === "IN_REVIEW") {
@@ -250,11 +258,33 @@ export function stampTapDescription(description: string | null | undefined, tapS
   return `${base} · ${tapStatus}`.replace(/^ · /, "");
 }
 
+function normalizeImportedTapStatus(status: string): TapStatus {
+  if (
+    status === "Not Started" ||
+    status === "On Schedule" ||
+    status === "Ongoing" ||
+    status === "Partially Completed" ||
+    status === "Behind Schedule" ||
+    status === "Fully Completed" ||
+    status === "Completed" ||
+    status === "Removed"
+  ) {
+    return status;
+  }
+  if (/fully completed/i.test(status)) return "Fully Completed";
+  if (/completed/i.test(status)) return "Completed";
+  if (/behind/i.test(status)) return "Behind Schedule";
+  if (/partial/i.test(status)) return "Partially Completed";
+  if (/ongoing/i.test(status)) return "Ongoing";
+  if (/not started/i.test(status)) return "Not Started";
+  return "On Schedule";
+}
+
 const OTHER = (tapOther as TapDepartment[]).map((dept) => ({
   ...dept,
   items: dept.items.map((item) => ({
     ...item,
-    status: item.status as TapStatus,
+    status: normalizeImportedTapStatus(item.status),
   })),
 }));
 

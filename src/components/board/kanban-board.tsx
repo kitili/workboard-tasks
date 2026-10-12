@@ -14,7 +14,9 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { canMoveTask, cardOwnerId } from "@/lib/board/access";
-import { BOARD_COLUMNS, PRIORITY_LABELS, columnForStatus } from "@/lib/board/columns";
+import { BOARD_COLUMNS, PRIORITY_LABELS, columnForStatus, returnToTasksError } from "@/lib/board/columns";
+import { sheetColumnTitle, writeSheetPhrase, type SheetPhrase } from "@/lib/board/sheet-status";
+import { preferredCompletedWord } from "@/lib/data/tap-catalog";
 import { DEPARTMENTS } from "@/lib/departments";
 import { AddDepartmentPerson } from "@/components/board/add-department-person";
 import { FiledTodayList } from "@/components/board/filed-today-list";
@@ -31,6 +33,7 @@ type KanbanBoardProps = {
   admin?: boolean;
   departmentName?: string | null;
   departmentSlug?: string | null;
+  viewerDepartment?: string | null;
   missingDaily?: MissingDailyPerson[];
   filedToday?: FiledTodayPerson[];
   tapTitle?: string | null;
@@ -44,6 +47,27 @@ const collisionDetection: CollisionDetection = (args) => {
   if (pointed.length > 0) return pointed;
   return rectIntersection(args);
 };
+
+function boardIntro({
+  admin,
+  mine,
+  departmentSlug,
+  departmentName,
+}: {
+  admin: boolean;
+  mine: boolean;
+  departmentSlug: string | null;
+  departmentName: string | null;
+}) {
+  const done = preferredCompletedWord(departmentSlug);
+  const words = `On Schedule, Ongoing, Not Started, and ${done}. A touched card does not go back to On Schedule. Leftover On Schedule cards move to Not Started the next day. At 6pm Tanzanian time the sheet catches up with the cards.`;
+  if (admin && !mine) {
+    if (!departmentSlug) return `Every TAP uses the sheet words: ${words}`;
+    return `${departmentName ?? "This department"} uses the sheet words: ${words}`;
+  }
+  if (mine) return `Your cards use the sheet words: ${words}`;
+  return `${departmentName ?? "This department"} uses the sheet words: ${words}`;
+}
 
 function groupByStatus(tasks: BoardTask[]): Record<string, BoardTask[]> {
   const grouped: Record<string, BoardTask[]> = {};
@@ -63,11 +87,11 @@ export function KanbanBoard({
   admin = false,
   departmentName = null,
   departmentSlug = null,
+  viewerDepartment = null,
   missingDaily = [],
   filedToday = [],
   tapTitle = null,
   tapPeople = [],
-  tapDepartments = [],
   assignUsers,
 }: KanbanBoardProps) {
   const [tasks, setTasks] = useState(initialTasks);
@@ -91,6 +115,7 @@ export function KanbanBoard({
     [tasks, personFilter],
   );
   const columns = useMemo(() => groupByStatus(visible), [visible]);
+  const sheetDept = departmentSlug ?? viewerDepartment;
   const activeTask = tasks.find((task) => task.id === activeId) ?? null;
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
@@ -119,6 +144,11 @@ export function KanbanBoard({
     }
 
     if (targetStatus === columnForStatus(task.status)) return;
+    const blocked = returnToTasksError(task.status, targetStatus);
+    if (blocked) {
+      setNotice(blocked);
+      return;
+    }
 
     setTasks((prev) => prev.map((item) => (item.id === taskId ? { ...item, status: targetStatus } : item)));
     setOpenGroups((prev) => ({ ...prev, [`${targetStatus}:${task.assignee?.id ?? "unassigned"}`]: true }));
@@ -135,13 +165,22 @@ export function KanbanBoard({
       return;
     }
     if (targetStatus === "COMPLETED") {
-      setNotice("Marked Done for today. It stays here until tomorrow, and 1–5 history keeps it as Done.");
+      setNotice(`Marked ${preferredCompletedWord(task.departmentSlug ?? sheetDept)}. The sheet uses that same word, and it stays completed.`);
+    } else {
+      setNotice("The live sheet now uses the same word as this card.");
     }
   }
 
   async function changeTask(
     taskId: string,
-    patch: { title?: string; priority?: string | null; shareWith?: string; handoverTo?: string; assigneeId?: string | null },
+    patch: {
+      title?: string;
+      priority?: string | null;
+      shareWith?: string;
+      handoverTo?: string;
+      assigneeId?: string | null;
+      tapStatus?: string;
+    },
   ) {
     setNotice("");
     const directory = assignUsers?.length ? assignUsers : users;
@@ -158,6 +197,7 @@ export function KanbanBoard({
         return {
           ...task,
           title: patch.title ?? task.title,
+          description: patch.tapStatus ? writeSheetPhrase(task.description, patch.tapStatus as SheetPhrase) : task.description,
           priority: patch.priority === undefined ? task.priority : patch.priority,
           assignee,
           sharedWithIds: patch.handoverTo
@@ -184,17 +224,19 @@ export function KanbanBoard({
 
   return (
     <>
-      {(tapPeople.length > 0 || tapDepartments.length > 0) && !mine ? (
-        <TapRoster
-          title={tapTitle ?? "TAP"}
-          people={tapPeople}
-          groups={tapDepartments}
-          extra={
-            admin ? (
-              <AddDepartmentPerson departmentSlug={departmentSlug} departmentName={departmentName} />
-            ) : null
-          }
-        />
+      {departmentSlug && tapPeople.length > 0 && !mine ? (
+        <details className="admin-fold">
+          <summary>Who’s on {departmentName ?? "this department"}</summary>
+          <TapRoster
+            title={tapTitle ?? "TAP"}
+            people={tapPeople}
+            extra={
+              admin ? (
+                <AddDepartmentPerson departmentSlug={departmentSlug} departmentName={departmentName} />
+              ) : null
+            }
+          />
+        </details>
       ) : null}
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
@@ -208,11 +250,7 @@ export function KanbanBoard({
                   : "Silverleaf Tasks"}
           </h2>
           <p className="mt-1 text-sm text-zinc-500">
-            {admin && !mine
-              ? "Pick a TAP, or look at all of them. Each block names the TAP it came from."
-              : mine
-                ? "Only your cards. Done stays visible for today, then clears tomorrow. 1–5 history keeps it as Done."
-                : `${departmentName ?? "This department"} only. Other departments stay private.`}
+            {boardIntro({ admin, mine, departmentSlug, departmentName })}
           </p>
         </div>
         {admin && !mine ? (
@@ -260,8 +298,16 @@ export function KanbanBoard({
       </div>
 
       {notice ? <p className="mb-4 text-sm text-[#002368]">{notice}</p> : null}
-      {admin && !mine ? <FiledTodayList people={filedToday} departmentName={departmentName} /> : null}
-      {admin && !mine ? <MissingDailyList people={missingDaily} departmentName={departmentName} /> : null}
+      {admin && !mine ? (
+        <details className="admin-fold">
+          <summary>
+            Today’s 1–5s
+            {departmentName ? ` · ${departmentName}` : ""}
+          </summary>
+          <FiledTodayList people={filedToday} departmentName={departmentName} />
+          <MissingDailyList people={missingDaily} departmentName={departmentName} />
+        </details>
+      ) : null}
 
       <DndContext
         sensors={sensors}
@@ -273,7 +319,7 @@ export function KanbanBoard({
           {BOARD_COLUMNS.map((column) => (
             <BoardColumn
               key={column.id}
-              column={column}
+              column={{ ...column, title: sheetColumnTitle(column.id, departmentSlug ?? viewerDepartment) }}
               tasks={columns[column.id] ?? []}
               users={people}
               assignUsers={assignUsers ?? people}

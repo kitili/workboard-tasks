@@ -116,12 +116,56 @@ input::placeholder, textarea::placeholder {
   margin-left: auto;
 }
 
-.site-nav__links > a {
+.site-nav__links > a,
+.site-nav__menu-button,
+.site-nav__menu-panel a {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
   font-weight: 600;
   font-size: 0.95rem;
+}
+
+.site-nav__links a[aria-current="page"],
+.site-nav__menu-button[aria-current="page"] {
+  box-shadow: inset 0 -2px 0 var(--gold);
+}
+
+.site-nav__menu {
+  position: relative;
+}
+
+.site-nav__menu-button {
+  background: transparent;
+  color: var(--electric-blue);
+}
+
+.site-nav__menu-panel {
+  display: none;
+  position: absolute;
+  top: calc(100% + 0.55rem);
+  left: 0;
+  z-index: 4;
+  min-width: 11.5rem;
+  padding: 0.35rem;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  background: var(--white);
+  box-shadow: var(--shadow-lg);
+}
+
+.site-nav__menu[data-open] .site-nav__menu-panel {
+  display: grid;
+}
+
+.site-nav__menu-panel a {
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+}
+
+.site-nav__menu-panel a:hover {
+  background: var(--light-blue-30);
+  text-decoration: none;
 }
 
 .site-nav__badge {
@@ -277,6 +321,29 @@ input::placeholder, textarea::placeholder {
   padding: 1.5rem;
 }
 
+.admin-fold {
+  margin-bottom: 1rem;
+  border: 1px solid rgba(0, 35, 104, 0.1);
+  border-radius: 1.25rem;
+  background: #fff;
+  padding: 0.85rem 1.1rem;
+}
+
+.admin-fold > summary {
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #002368;
+}
+
+.admin-fold[open] > summary {
+  margin-bottom: 0.75rem;
+}
+
+.admin-fold .mb-5 {
+  margin-bottom: 0.75rem;
+}
+
 @media (max-width: 600px) {
   .site-nav__toggle {
     display: inline-flex;
@@ -321,5 +388,12 @@ input::placeholder, textarea::placeholder {
     inset: 0;
     z-index: 1;
     background: rgba(20, 35, 59, 0.45);
+  }
+
+  .site-nav__menu-panel {
+    position: static;
+    min-width: 0;
+    margin-top: 0.25rem;
+    box-shadow: none;
   }
 }

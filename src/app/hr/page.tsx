@@ -4,6 +4,8 @@ import { canViewDesk, deskTitle } from "@/lib/auth/desk";
 import { getDefaultOrganization } from "@/lib/data/dashboard";
 import { deskPermissions, getDepartmentTapDesk } from "@/lib/services/department-desk";
 import { DepartmentTapDesk } from "@/components/desk/department-tap-desk";
+import { sheetDeskBlurb } from "@/lib/board/sheet-status";
+import { preferredCompletedWord } from "@/lib/data/tap-catalog";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +21,7 @@ export default async function HrTapPage() {
     <DepartmentTapDesk
       slug="hr"
       title={deskTitle("hr")}
-      blurb="Every HR rock and sub-rock lives here. Park TAP on today’s 1–5s, share cards with Valentina, Bwana, or anyone Esther adds, and drag your own cards across Backlog, To do, Doing, and Done."
+      blurb={`Every HR rock and sub-rock lives here. Park TAP on today’s 1–5s and share cards with Valentina, Bwana, or anyone Esther adds. ${sheetDeskBlurb(preferredCompletedWord("hr"))}`}
       viewerId={session.id}
       groups={desk.groups}
       people={desk.people}

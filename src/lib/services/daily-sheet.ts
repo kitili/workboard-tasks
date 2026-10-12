@@ -5,6 +5,9 @@ import { allocateTaskKey } from "@/lib/board/task-key";
 import { isOpsCrew, isOpsLead } from "@/lib/auth/admin";
 import { itemsForTapPerson, pickOpenTapItems, tapDepartment } from "@/lib/data/tap-catalog";
 import { getEnv } from "@/lib/env";
+import { sixPmHasPassed } from "@/lib/board/missing-daily";
+import { columnForStatus } from "@/lib/board/columns";
+import { sheetCardPhrase, writeSheetPhrase, type SheetPhrase } from "@/lib/board/sheet-status";
 import { pickDailyTapLineup, type TodayTapChip } from "@/lib/today/tap-lineup";
 
 export type DailySlotInput = {
@@ -127,6 +130,52 @@ export async function parkUnfinishedDailyTasks(organizationId: string) {
     where: { taskId: { in: ids } },
     data: { status: "BACKLOG" },
   });
+  await stampSheetPhrase(ids, "Not Started");
+}
+
+/** At 6pm East Africa Time, stamp every TAP card onto the live sheet in that department’s own words. */
+export async function closeUntouchedAfterSix(organizationId: string, now = new Date()) {
+  if (!sixPmHasPassed(now)) return { stamped: 0 };
+  return { stamped: await reflectLiveSheet(organizationId) };
+}
+
+export async function syncLiveSheet(organizationId: string, now = new Date()) {
+  await parkUnfinishedDailyTasks(organizationId);
+  return closeUntouchedAfterSix(organizationId, now);
+}
+
+async function stampSheetPhrase(ids: string[], phrase: SheetPhrase) {
+  if (ids.length === 0) return;
+  const rows = await db.task.findMany({
+    where: { id: { in: ids }, labels: { has: "TAP" } },
+    select: { id: true, description: true },
+  });
+  for (const row of rows) {
+    await db.task.update({
+      where: { id: row.id },
+      data: { description: writeSheetPhrase(row.description, phrase) },
+    });
+  }
+}
+
+async function reflectLiveSheet(organizationId: string) {
+  const tasks = await db.task.findMany({
+    where: {
+      organizationId,
+      labels: { has: "TAP" },
+      status: { not: "CANCELLED" },
+    },
+    select: { id: true, status: true, description: true, departmentSlug: true },
+  });
+  let stamped = 0;
+  for (const task of tasks) {
+    const phrase = sheetCardPhrase(task.status, task.description, task.departmentSlug) as SheetPhrase;
+    const next = writeSheetPhrase(task.description, phrase);
+    if (next === (task.description ?? "")) continue;
+    await db.task.update({ where: { id: task.id }, data: { description: next } });
+    stamped += 1;
+  }
+  return stamped;
 }
 
 export async function getTodaySheet(organizationId?: string) {
@@ -140,6 +189,7 @@ export async function getTodaySheet(organizationId?: string) {
   if (!org) return { people: [], date: startOfDay(new Date()).toISOString() };
 
   await parkUnfinishedDailyTasks(org.id);
+  await closeUntouchedAfterSix(org.id);
   await attachMissingDailyCards(org.id);
   const planDate = startOfDay(new Date());
   const people = await db.user.findMany({
@@ -262,16 +312,22 @@ export async function getTodayTapLineup(userId: string): Promise<{ lineup: Today
     ...yesterdaySlots.filter((item) => item.done).map((item) => item.title.toLowerCase().replace(/\s+/g, " ").trim()),
   ]);
 
-  const boardChips: TodayTapChip[] = [...openTaps]
-    .sort((a, b) => {
-      const rock = (task: (typeof openTaps)[number]) =>
-        task.labels.some((label) => /\.0$/.test(label.replace(/^Rock\s+/i, "")));
-      return (
-        Number(rock(b)) - Number(rock(a)) ||
-        (TAP_STATUS_RANK[a.status] ?? 9) - (TAP_STATUS_RANK[b.status] ?? 9) ||
-        a.columnOrder - b.columnOrder
-      );
-    })
+  const rankedTaps = [...openTaps].sort((a, b) => {
+    const rock = (task: (typeof openTaps)[number]) =>
+      task.labels.some((label) => /\.0$/.test(label.replace(/^Rock\s+/i, "")));
+    return (
+      Number(rock(b)) - Number(rock(a)) ||
+      (TAP_STATUS_RANK[a.status] ?? 9) - (TAP_STATUS_RANK[b.status] ?? 9) ||
+      a.columnOrder - b.columnOrder
+    );
+  });
+  const touchedTitles = new Set(
+    rankedTaps
+      .filter((task) => columnForStatus(task.status) !== "TODO")
+      .map((task) => task.title.toLowerCase().replace(/\s+/g, " ").trim()),
+  );
+  const boardChips: TodayTapChip[] = rankedTaps
+    .filter((task) => columnForStatus(task.status) === "TODO")
     .map((task) => ({
       id: task.id,
       title: task.title,
@@ -279,11 +335,13 @@ export async function getTodayTapLineup(userId: string): Promise<{ lineup: Today
       status: task.status,
     }));
 
-  const seen = new Set(boardChips.map((chip) => chip.title.toLowerCase().replace(/\s+/g, " ").trim()));
+  const seen = new Set(rankedTaps.map((task) => task.title.toLowerCase().replace(/\s+/g, " ").trim()));
   const dept = tapDepartment(user.departmentSlug);
   const catalog = pickOpenTapItems(itemsForTapPerson(user), {
     skipTitles: [...doneTitles, ...seen],
-    keepTitles: yesterdaySlots.filter((item) => !item.done).map((item) => item.title),
+    keepTitles: yesterdaySlots
+      .filter((item) => !item.done && !touchedTitles.has(item.title.toLowerCase().replace(/\s+/g, " ").trim()))
+      .map((item) => item.title),
     limit: 12,
   });
   const catalogChips: TodayTapChip[] = catalog
@@ -324,6 +382,69 @@ export async function deleteTodaySlot(userId: string, slot: number) {
   }
 }
 
+async function resolveSheetTask(
+  user: { id: string; organizationId: string; departmentSlug: string | null },
+  title: string,
+  taskId?: string | null,
+) {
+  const ref = taskId?.trim();
+  if (ref?.startsWith("catalog:")) {
+    const [, slug, ...rest] = ref.split(":");
+    const code = rest.join(":");
+    if (code) {
+      const task = await db.task.findFirst({
+        where: {
+          organizationId: user.organizationId,
+          departmentSlug: slug || user.departmentSlug || undefined,
+          labels: { hasEvery: ["TAP", `Rock ${code}`] },
+        },
+      });
+      if (task) return task;
+    }
+  } else if (ref) {
+    const task = await db.task.findFirst({
+      where: {
+        id: ref,
+        organizationId: user.organizationId,
+        OR: [
+          { assigneeId: user.id },
+          { sharedWithIds: { has: user.id } },
+          { moveOwnerId: user.id },
+          { authorId: user.id },
+        ],
+      },
+    });
+    if (task) return task;
+  }
+
+  const normalized = title.toLowerCase().replace(/\s+/g, " ").trim();
+  if (!normalized) return null;
+  const candidates = await db.task.findMany({
+    where: {
+      organizationId: user.organizationId,
+      labels: { has: "TAP" },
+      ...(user.departmentSlug ? { departmentSlug: user.departmentSlug } : {}),
+      OR: [{ assigneeId: user.id }, { sharedWithIds: { has: user.id } }, { moveOwnerId: user.id }],
+    },
+    take: 200,
+  });
+  return candidates.find((task) => task.title.toLowerCase().replace(/\s+/g, " ").trim() === normalized) ?? null;
+}
+
+async function mirrorLineOnTask(
+  task: { id: string; title: string; status: string; description: string | null; labels: string[]; departmentSlug: string | null },
+  title: string,
+) {
+  const description = task.labels.includes("TAP")
+    ? writeSheetPhrase(task.description, sheetCardPhrase(task.status, task.description, task.departmentSlug) as SheetPhrase)
+    : undefined;
+  if (task.title === title && (!description || description === task.description)) return;
+  await db.task.update({
+    where: { id: task.id },
+    data: { title, description },
+  });
+}
+
 export async function saveTodaySlots(
   userId: string,
   slots: Array<{ slot?: number; title: string; priority?: TaskPriority | null; taskId?: string | null }>,
@@ -357,53 +478,35 @@ export async function saveTodaySlots(
       let nextTaskId = current.taskId;
       let lineTitle = title;
       if (slot.taskId && slot.taskId !== current.taskId) {
-        const picked = await db.task.findFirst({
-          where: {
-            id: slot.taskId,
-            OR: [{ assigneeId: userId }, { sharedWithIds: { has: userId } }, { moveOwnerId: userId }],
-          },
-        });
+        const picked = await resolveSheetTask(user, lineTitle, slot.taskId);
         if (picked) {
-          if (current.taskId && current.task?.source === "DAILY") {
+          if (current.taskId && current.task?.source === "DAILY" && current.taskId !== picked.id) {
             await db.task.delete({ where: { id: current.taskId } }).catch(() => undefined);
           }
           nextTaskId = picked.id;
-          lineTitle = picked.title;
+          await mirrorLineOnTask(picked, lineTitle);
         }
       }
       if (!nextTaskId) {
-        const project = await ensureWorkProject(user.organizationId);
-        const created = await createDailyCard({
-          organizationId: user.organizationId,
-          projectId: project.id,
-          userId,
-          departmentSlug: user.departmentSlug,
-          title: lineTitle,
-          slot: line,
-          priority: slot.priority ?? null,
-        });
-        nextTaskId = created.id;
-      } else if (nextTaskId === current.taskId) {
-        if (current.task?.labels.includes("TAP")) {
-          if (current.title.trim() !== lineTitle) {
-            const project = await ensureWorkProject(user.organizationId);
-            const created = await createDailyCard({
-              organizationId: user.organizationId,
-              projectId: project.id,
-              userId,
-              departmentSlug: user.departmentSlug,
-              title: lineTitle,
-              slot: line,
-              priority: slot.priority ?? null,
-            });
-            nextTaskId = created.id;
-          }
+        const linked = await resolveSheetTask(user, lineTitle, slot.taskId);
+        if (linked) {
+          nextTaskId = linked.id;
+          await mirrorLineOnTask(linked, lineTitle);
         } else {
-          await db.task.update({
-            where: { id: nextTaskId },
-            data: { title: lineTitle, priority: slot.priority ?? current.task?.priority ?? null },
+          const project = await ensureWorkProject(user.organizationId);
+          const created = await createDailyCard({
+            organizationId: user.organizationId,
+            projectId: project.id,
+            userId,
+            departmentSlug: user.departmentSlug,
+            title: lineTitle,
+            slot: line,
+            priority: slot.priority ?? null,
           });
+          nextTaskId = created.id;
         }
+      } else if (nextTaskId === current.taskId && current.task) {
+        await mirrorLineOnTask(current.task, lineTitle);
       }
       await db.dailyPlanItem.update({
         where: { id: current.id },
@@ -412,19 +515,13 @@ export async function saveTodaySlots(
       if (line === 4 || line === 5) await upsertLineNote(user.organizationId, userId, planDate, line, lineTitle);
       continue;
     }
-    if (slot.taskId) {
-      const picked = await db.task.findFirst({
-        where: {
-          id: slot.taskId,
-          OR: [{ assigneeId: userId }, { sharedWithIds: { has: userId } }, { moveOwnerId: userId }],
-        },
+    const linked = await resolveSheetTask(user, title, slot.taskId);
+    if (linked) {
+      await mirrorLineOnTask(linked, title);
+      await db.dailyPlanItem.create({
+        data: { dailyPlanId: plan.id, slot: line, title, status: linked.status, taskId: linked.id },
       });
-      if (picked) {
-        await db.dailyPlanItem.create({
-          data: { dailyPlanId: plan.id, slot: line, title: picked.title, status: picked.status, taskId: picked.id },
-        });
-        continue;
-      }
+      continue;
     }
     await addTodayTask(userId, { title, priority: slot.priority ?? null, slot: line });
   }

@@ -93,6 +93,17 @@ export function isMarketingMember(user: AdminPerson | null | undefined) {
   return named(user, "mariam");
 }
 
+export function isDataTechMember(user: AdminPerson | null | undefined) {
+  if (!user) return false;
+  if (user.departmentSlug === "data-tech") return true;
+  return (
+    named(user, "onesmo") ||
+    named(user, "nehemia") ||
+    named(user, "katya") ||
+    named(user, "irene", ["musau"])
+  );
+}
+
 export function isUpdatesAdmin(user: AdminPerson | null | undefined) {
   return isBoardAdmin(user);
 }

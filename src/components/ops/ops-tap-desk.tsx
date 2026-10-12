@@ -31,10 +31,10 @@ const PERSON_WASH: Record<string, string> = {
 };
 
 const STATUSES = [
-  { value: "BACKLOG", label: "Backlog", wash: "#F3EEFF" },
-  { value: "TODO", label: "To do", wash: "#D9ECF9" },
-  { value: "IN_PROGRESS", label: "Doing", wash: "#FFF7E5" },
-  { value: "COMPLETED", label: "Done", wash: "#E8F7F1" },
+  { value: "TODO", label: "On Schedule", wash: "#D9ECF9" },
+  { value: "IN_PROGRESS", label: "Ongoing", wash: "#FFF7E5" },
+  { value: "BACKLOG", label: "Not Started", wash: "#ECECEC" },
+  { value: "COMPLETED", label: "Fully Completed", wash: "#002368" },
 ] as const;
 
 function dayValue(iso: string | null) {

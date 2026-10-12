@@ -19,7 +19,14 @@ type BoardColumnProps = {
   viewerDept?: string | null;
   onChangeTask: (
     taskId: string,
-    patch: { title?: string; priority?: string | null; shareWith?: string; handoverTo?: string; assigneeId?: string | null },
+    patch: {
+      title?: string;
+      priority?: string | null;
+      shareWith?: string;
+      handoverTo?: string;
+      assigneeId?: string | null;
+      tapStatus?: string;
+    },
   ) => void;
 };
 

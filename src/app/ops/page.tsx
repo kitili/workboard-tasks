@@ -4,6 +4,8 @@ import { canViewDesk, deskTitle } from "@/lib/auth/desk";
 import { getDefaultOrganization } from "@/lib/data/dashboard";
 import { deskPermissions, getDepartmentTapDesk } from "@/lib/services/department-desk";
 import { DepartmentTapDesk } from "@/components/desk/department-tap-desk";
+import { sheetDeskBlurb } from "@/lib/board/sheet-status";
+import { preferredCompletedWord } from "@/lib/data/tap-catalog";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +21,7 @@ export default async function OpsTapPage() {
     <DepartmentTapDesk
       slug="operations"
       title={deskTitle("operations")}
-      blurb="Every ops rock and sub-rock, plus TAP that names Baraka, Francis, Kusaduka, or Shikunzi anywhere in the sheet. Baraka and Shikunzi can add people with roles. Drag your own cards; park today’s three on the team."
+      blurb={`Every ops rock and sub-rock, plus TAP that names Baraka, Francis, Kusaduka, or Shikunzi anywhere in the sheet. Baraka and Shikunzi can add people with roles. ${sheetDeskBlurb(preferredCompletedWord("operations"))}`}
       viewerId={session.id}
       groups={desk.groups}
       people={desk.people}

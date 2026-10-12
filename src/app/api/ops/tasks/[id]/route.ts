@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/session";
-import { boardStatusToTap, stampTapDescription } from "@/lib/data/tap-catalog";
+import { returnToTasksError } from "@/lib/board/columns";
+import { sheetCardPhrase, writeSheetPhrase, type SheetPhrase } from "@/lib/board/sheet-status";
 import { canEditOpsTap, canRunOpsDesk, getOpsTapDesk } from "@/lib/services/ops-desk";
 import { syncDailyItemStatus } from "@/lib/services/daily-sheet";
 import { db } from "@/lib/db";
@@ -31,13 +32,17 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   const task = await db.task.findUnique({
     where: { id },
-    select: { id: true, labels: true, organizationId: true, description: true, status: true },
+    select: { id: true, labels: true, organizationId: true, description: true, status: true, departmentSlug: true },
   });
   if (!task?.labels.includes("TAP") || task.organizationId !== session.organizationId) {
     return NextResponse.json({ error: "TAP line not found." }, { status: 404 });
   }
 
   const nextStatus = body.data.status;
+  if (nextStatus) {
+    const blocked = returnToTasksError(task.status, nextStatus);
+    if (blocked) return NextResponse.json({ error: blocked }, { status: 403 });
+  }
   await db.task.update({
     where: { id },
     data: {
@@ -45,7 +50,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       status: nextStatus,
       description:
         nextStatus && nextStatus !== task.status
-          ? stampTapDescription(task.description, boardStatusToTap(nextStatus))
+          ? writeSheetPhrase(task.description, sheetCardPhrase(nextStatus, task.description, task.departmentSlug) as SheetPhrase)
           : undefined,
       completedAt: nextStatus ? (nextStatus === "COMPLETED" ? new Date() : null) : undefined,
     },

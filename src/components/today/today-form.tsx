@@ -29,7 +29,7 @@ function rowsFrom(saved: Array<{ slot: number; title: string; taskId?: string | 
 }
 
 function chipTaskId(chip: TodayTapChip) {
-  return chip.id.startsWith("catalog:") ? null : chip.id;
+  return chip.id;
 }
 
 export function TodayForm({
@@ -139,7 +139,7 @@ export function TodayForm({
       setError(data.error ?? "Could not keep those tasks");
       return;
     }
-    setNotice("Kept. Each line is a card on your board, and you can still edit it here.");
+    setNotice("Kept. The board and your department tab show the same cards.");
     router.refresh();
   }
 
@@ -228,7 +228,7 @@ export function TodayForm({
                 line={line}
                 value={rows[line.slot - 1]?.title ?? ""}
                 readOnly={assignedOnly}
-                onChange={(title) => setRow(line.slot, { title, taskId: null })}
+                onChange={(title) => setRow(line.slot, { title })}
                 onRemove={() => void removeLine(line.slot)}
               />
             ))}

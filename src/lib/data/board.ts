@@ -1,7 +1,7 @@
 import { startOfDay } from "date-fns";
 import { db } from "@/lib/db";
 import type { TaskStatus } from "@/generated/prisma/client";
-import { parkUnfinishedDailyTasks } from "@/lib/services/daily-sheet";
+import { closeUntouchedAfterSix, parkUnfinishedDailyTasks } from "@/lib/services/daily-sheet";
 
 export async function getBoardProjects(organizationId?: string) {
   return db.project.findMany({
@@ -24,6 +24,7 @@ export async function getOrganizationBoard(
   options: { assigneeId?: string; departmentSlug?: string | null } = {},
 ) {
   await parkUnfinishedDailyTasks(organizationId);
+  await closeUntouchedAfterSix(organizationId);
   const [org, tasks, users, project] = await Promise.all([
     db.organization.findUnique({ where: { id: organizationId } }),
     db.task.findMany({
@@ -44,6 +45,7 @@ export async function getOrganizationBoard(
             OR: [
               { status: { not: "COMPLETED" } },
               { status: "COMPLETED", completedAt: { gte: startOfDay(new Date()) } },
+              { status: "COMPLETED", labels: { has: "TAP" } },
             ],
           },
         ],

@@ -109,6 +109,7 @@ export default async function BoardPage({
       admin={admin}
       departmentName={departmentBySlug(selectedDept)?.name ?? null}
       departmentSlug={selectedDept ?? null}
+      viewerDepartment={departmentSlug}
       missingDaily={missingDaily}
       filedToday={filedToday}
       tapTitle={selectedDept ? tapDepartment(selectedDept)?.tap ?? null : admin && !mine ? "All TAP departments" : null}

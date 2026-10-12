@@ -5,6 +5,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { canAssignTask, canMoveTask } from "@/lib/board/access";
 import { BOARD_COLUMNS, PRIORITY_LABELS } from "@/lib/board/columns";
+import { SHEET_PROGRESS, sheetCardPhrase } from "@/lib/board/sheet-status";
 import { dailyLineLabel } from "@/lib/daily-lines";
 import type { BoardTask, BoardUser } from "@/lib/board/types";
 
@@ -18,7 +19,14 @@ type TaskCardProps = {
   viewerDept?: string | null;
   onChange: (
     taskId: string,
-    patch: { title?: string; priority?: string | null; shareWith?: string; handoverTo?: string; assigneeId?: string | null },
+    patch: {
+      title?: string;
+      priority?: string | null;
+      shareWith?: string;
+      handoverTo?: string;
+      assigneeId?: string | null;
+      tapStatus?: string;
+    },
   ) => void;
 };
 
@@ -62,6 +70,7 @@ export function TaskCard({
   };
 
   const priority = PRIORITY_LABELS[task.priority ?? ""] ?? PRIORITY_LABELS[""];
+  const sheetPhrase = task.labels.includes("TAP") ? sheetCardPhrase(task.status, task.description, task.departmentSlug) : null;
   const phase = BOARD_COLUMNS.find((column) => column.id === columnStatus) ?? BOARD_COLUMNS[0];
 
   function saveTitle() {
@@ -105,6 +114,27 @@ export function TaskCard({
             {task.title}
           </p>
         )}
+        {sheetPhrase ? (
+          columnStatus === "IN_PROGRESS" && canAssign ? (
+            <label className="mt-2 block">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">Sheet</span>
+              <select
+                value={SHEET_PROGRESS.includes(sheetPhrase as (typeof SHEET_PROGRESS)[number]) ? sheetPhrase : "Ongoing"}
+                onChange={(e) => onChange(task.id, { tapStatus: e.target.value })}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="mt-1 w-full rounded-lg border border-zinc-200 bg-[#FFF7E5] px-2 py-1.5 text-xs font-semibold text-[#14233B]"
+              >
+                {SHEET_PROGRESS.map((phrase) => (
+                  <option key={phrase} value={phrase}>
+                    {phrase}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <p className="mt-2 inline-flex rounded-full bg-[#D9ECF9] px-2 py-0.5 text-[10px] font-semibold text-[#002368]">{sheetPhrase}</p>
+          )
+        ) : null}
         <div className="mt-1 flex items-start justify-between gap-2">
           <p className="text-[11px] text-zinc-400">
             {task.dailyItem ? dailyLineLabel(task.dailyItem.slot) : task.taskKey ?? "Task"}

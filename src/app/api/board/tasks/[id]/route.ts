@@ -1,12 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { TaskStatus } from "@/generated/prisma/client";
 import { z } from "zod";
 import { isBoardAdmin, isOpsCrew, isOpsLead } from "@/lib/auth/admin";
 import { canAssignTask, canMoveTask } from "@/lib/board/access";
+import { returnToTasksError } from "@/lib/board/columns";
+import {
+  columnForSheetPhrase,
+  isSheetPhrase,
+  sheetCardPhrase,
+  writeSheetPhrase,
+  type SheetPhrase,
+} from "@/lib/board/sheet-status";
 import { canSeeDepartment } from "@/lib/departments";
 import { getSessionUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { getTaskDetail } from "@/lib/data/board";
-import { boardStatusToTap, stampTapDescription } from "@/lib/data/tap-catalog";
 import { syncDailyItemStatus, syncDailyItemTitle } from "@/lib/services/daily-sheet";
 
 const updateSchema = z.object({
@@ -25,6 +33,17 @@ const updateSchema = z.object({
   dueDate: z.string().datetime().nullable().optional(),
   columnOrder: z.number().int().optional(),
   blockerNote: z.string().nullable().optional(),
+  tapStatus: z
+    .enum([
+      "Not Started",
+      "On Schedule",
+      "Ongoing",
+      "Partially Completed",
+      "Behind Schedule",
+      "Fully Completed",
+      "Completed",
+    ])
+    .optional(),
 });
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -63,7 +82,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (!canSeeDepartment(session, existing, admin)) {
       return NextResponse.json({ error: "That card stays inside its department." }, { status: 403 });
     }
-    const moving = body.status && body.status !== existing.status;
+    const sheetPhrase = body.tapStatus && isSheetPhrase(body.tapStatus) ? body.tapStatus : null;
+    const nextStatus = sheetPhrase ? columnForSheetPhrase(sheetPhrase) : body.status;
+    const moving = Boolean(nextStatus && nextStatus !== existing.status);
+    if (nextStatus) {
+      const blocked = returnToTasksError(existing.status, nextStatus);
+      if (blocked) return NextResponse.json({ error: blocked }, { status: 403 });
+    }
     const sameDeptTap = Boolean(
       existing.labels.includes("TAP") &&
         existing.departmentSlug &&
@@ -104,11 +129,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       where: { id },
       data: {
         title: body.title,
-        description:
-          existing.labels.includes("TAP") && body.status && body.status !== existing.status
-            ? stampTapDescription(body.description ?? existing.description, boardStatusToTap(body.status))
-            : body.description,
-        status: body.status,
+        description: sheetDescription(existing, nextStatus, sheetPhrase, body.description),
+        status: nextStatus as TaskStatus | undefined,
         type: body.type,
         priority: body.priority,
         assigneeId: nextAssignee,
@@ -119,10 +141,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         dueDate: body.dueDate === null ? null : body.dueDate ? new Date(body.dueDate) : undefined,
         columnOrder: body.columnOrder,
         blockerNote: body.blockerNote,
-        completedAt: body.status
-          ? body.status === "COMPLETED"
+        completedAt: nextStatus
+          ? nextStatus === "COMPLETED"
             ? new Date()
-            : body.status === existing.status
+            : nextStatus === existing.status
               ? undefined
               : null
           : undefined,
@@ -138,14 +160,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       await syncDailyItemTitle(task.id, body.title);
     }
 
-    if (body.status && body.status !== existing.status) {
-      await syncDailyItemStatus(task.id, body.status);
+    if (nextStatus && nextStatus !== existing.status) {
+      await syncDailyItemStatus(task.id, nextStatus as TaskStatus);
       await db.taskActivity.create({
         data: {
           taskId: task.id,
           type: "STATUS_CHANGED",
           fromStatus: existing.status,
-          toStatus: body.status,
+          toStatus: nextStatus as "BACKLOG" | "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "COMPLETED" | "BLOCKED" | "CANCELLED",
           message: "Moved on board",
         },
       });
@@ -156,4 +178,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const message = error instanceof Error ? error.message : "Request failed";
     return NextResponse.json({ error: message }, { status: 400 });
   }
+}
+
+function sheetDescription(
+  existing: { labels: string[]; departmentSlug: string | null; description: string | null },
+  nextStatus: string | undefined,
+  phrase: SheetPhrase | null,
+  incoming: string | null | undefined,
+) {
+  if (!existing.labels.includes("TAP") || (!phrase && !nextStatus)) return incoming;
+  const word = (phrase ?? sheetCardPhrase(nextStatus ?? "TODO", existing.description, existing.departmentSlug)) as SheetPhrase;
+  return writeSheetPhrase(incoming ?? existing.description, word);
 }

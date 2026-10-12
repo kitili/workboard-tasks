@@ -1,6 +1,7 @@
 import { startOfDay } from "date-fns";
 import { isBoardAdmin, isOpsCrew, isOpsLead, opsDeskPersonLabel, OPS_DESK_NAMES, type OpsDeskName } from "@/lib/auth/admin";
 import type { DepartmentSlug } from "@/lib/departments";
+import { taskForTapLine } from "@/lib/board/tap-match";
 import { opsTapDeskCatalog, tapItemBelongsOnOpsDesk, type TapItem } from "@/lib/data/tap-catalog";
 import { db } from "@/lib/db";
 import { syncTapTasks } from "@/lib/services/tap-sync";
@@ -18,6 +19,7 @@ type BoardTap = {
   id: string;
   title: string;
   status: string;
+  labels: string[];
   departmentSlug: string | null;
   dueDate: Date | null;
   assignee: { id: string; name: string | null; username: string | null } | null;
@@ -90,6 +92,7 @@ export async function getOpsTapDesk(organizationId: string) {
         id: true,
         title: true,
         status: true,
+        labels: true,
         departmentSlug: true,
         dueDate: true,
         assignee: { select: { id: true, name: true, username: true } },
@@ -170,8 +173,7 @@ function eatDay(value: Date | string | null | undefined) {
 }
 
 function hydrateLine(item: TapItem, slug: string, tasks: BoardTap[], today: Date, crew: OpsDeskPerson[]): OpsDeskLine {
-  const title = `${item.code} ${item.title}`;
-  const task = tasks.find((row) => row.departmentSlug === slug && row.title === title);
+  const task = taskForTapLine(tasks, slug, item.code, item.title);
   const onToday = task?.dailyItem && task.dailyItem.dailyPlan.planDate.getTime() === today.getTime();
   const todayPerson = onToday && task?.dailyItem ? task.dailyItem.dailyPlan.user.name : null;
   const todayLabel = todayPerson

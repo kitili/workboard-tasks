@@ -1,13 +1,15 @@
 import "dotenv/config";
 import { db } from "../src/lib/db";
 import { inferDepartment } from "../src/lib/departments";
-import { boardStatusToTap, deskCatalogPeople, departmentTapCatalog, groupTapRocks, opsTapDeskCatalog, personMatchesTapOwner, pickOpenTapItems, TAP_DEPARTMENTS, tapDepartment, tapItemBelongsOnOpsDesk, tapPeople } from "../src/lib/data/tap-catalog";
-import { isHrLead, isHrMember, isMarketingLead, isMarketingMember, isOpsCrew, isOpsLead, isShikunzi, opsCrewLabel, opsDeskPersonLabel } from "../src/lib/auth/admin";
+import { boardStatusToTap, deskCatalogPeople, departmentTapCatalog, groupTapRocks, opsTapDeskCatalog, personMatchesTapOwner, pickOpenTapItems, preferredCompletedWord, TAP_DEPARTMENTS, tapDepartment, tapItemBelongsOnOpsDesk, tapPeople } from "../src/lib/data/tap-catalog";
+import { isDataTechMember, isHrLead, isHrMember, isMarketingLead, isMarketingMember, isOpsCrew, isOpsLead, isShikunzi, opsCrewLabel, opsDeskPersonLabel } from "../src/lib/auth/admin";
 import { canAddDeskMembers } from "../src/lib/auth/desk";
 import { getKpiDashboard } from "../src/lib/services/kpi";
 import { pickDailyTapLineup } from "../src/lib/today/tap-lineup";
 import { syncTapTasks } from "../src/lib/services/tap-sync";
-import { noonHasPassed, selectDepartmentStaff, selectMissingDaily } from "../src/lib/board/missing-daily";
+import { noonHasPassed, selectDepartmentStaff, selectMissingDaily, sixPmHasPassed } from "../src/lib/board/missing-daily";
+import { returnToTasksError } from "../src/lib/board/columns";
+import { sheetCardPhrase, sheetColumnTitle, writeSheetPhrase } from "../src/lib/board/sheet-status";
 import { syncAllUserDepartments } from "../src/lib/services/departments";
 
 const EXPECTED: Record<string, string[]> = {
@@ -108,6 +110,7 @@ async function main() {
   check(opsDeskPersonLabel({ name: "Majundo Hassan" }) === "Baraka", "Majundo can take a TAP himself");
   check(opsDeskPersonLabel({ name: "Francis" }) === "Francis", "Francis is on the ops desk people");
   check(boardStatusToTap("COMPLETED") === "Fully Completed", "board Done stamps Fully Completed on the sheet");
+  check(boardStatusToTap("COMPLETED", "On Schedule", "finance") === "Completed", "finance Done stamps Completed on the sheet");
   check(boardStatusToTap("IN_PROGRESS") === "Ongoing", "board Doing stamps Ongoing on the sheet");
   check(boardStatusToTap("BACKLOG") === "Not Started", "board Backlog stamps Not Started on the sheet");
   const desk = opsTapDeskCatalog();
@@ -156,6 +159,28 @@ async function main() {
   check(canAddDeskMembers({ name: "Francis" }, "operations") === false, "Francis does not add ops people");
   check(canAddDeskMembers({ name: "Esther Mwalyego" }, "hr") === true, "Esther can add HR people");
   check(canAddDeskMembers({ name: "Kilusu Mattasia" }, "marketing") === true, "Kilusu can add marketing people");
+  check(isDataTechMember({ departmentSlug: "data-tech" }) === true, "Data & Tech department slug is on the Data & Tech desk");
+  check(isDataTechMember({ name: "Irene Musau" }) === true, "Irene Musau is on the Data & Tech desk");
+  check(isDataTechMember({ name: "Irene Didass Machange" }) === false, "Irene Didass is not on the Data & Tech desk");
+  check(returnToTasksError("IN_PROGRESS", "TODO") !== null, "in progress cannot go back to untouched tasks");
+  check(returnToTasksError("COMPLETED", "BACKLOG") !== null, "done cards stay completed");
+  check(returnToTasksError("TODO", "IN_PROGRESS") === null, "untouched tasks can move to in progress");
+  check(returnToTasksError("BACKLOG", "IN_PROGRESS") === null, "backlog can move to in progress");
+  check(sheetColumnTitle("TODO") === "On Schedule", "tasks column uses On Schedule");
+  check(sheetColumnTitle("IN_PROGRESS") === "Ongoing", "doing column uses Ongoing");
+  check(sheetColumnTitle("BACKLOG") === "Not Started", "backlog column uses Not Started");
+  check(sheetColumnTitle("COMPLETED", "hr") === "Fully Completed", "HR done column uses Fully Completed");
+  check(sheetColumnTitle("COMPLETED", "operations") === "Fully Completed", "ops done column uses Fully Completed");
+  check(sheetColumnTitle("COMPLETED", "marketing") === "Fully Completed", "marketing done column uses Fully Completed");
+  check(sheetColumnTitle("COMPLETED", "finance") === "Completed", "finance done column uses Completed");
+  check(preferredCompletedWord("arusha-modern") === "Completed", "Arusha Modern sheet says Completed");
+  check(
+    sheetCardPhrase("IN_PROGRESS", "MEL calendar · Partially Completed", "hr") === "Partially Completed",
+    "in-progress cards keep Partially Completed",
+  );
+  check(writeSheetPhrase("MEL calendar · On Schedule", "Fully Completed") === "MEL calendar · Fully Completed", "sheet phrase stamp replaces the last word");
+  check(sixPmHasPassed(new Date("2026-10-12T17:59:00+03:00")) === false, "sheet sync waits until 18:00 EAT");
+  check(sixPmHasPassed(new Date("2026-10-12T18:00:00+03:00")) === true, "sheet sync is due at 18:00 EAT");
   const opsRock = tapDepartment("operations");
   const grouped = groupTapRocks(opsRock?.items ?? []);
   const transport = grouped.find((rock) => rock.parent.code === "1.0");
