@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { isBoardAdmin } from "@/lib/auth/admin";
+import { canAddDeskMembers, isDeskSlug } from "@/lib/auth/desk";
 import { getSessionUser } from "@/lib/auth/session";
 import { DEPARTMENTS } from "@/lib/departments";
 import { db } from "@/lib/db";
@@ -14,10 +15,12 @@ const schema = z.object({
 export async function POST(request: NextRequest) {
   const session = await getSessionUser();
   if (!session) return NextResponse.json({ error: "Log in first" }, { status: 401 });
-  if (!isBoardAdmin(session)) return NextResponse.json({ error: "Admins only" }, { status: 403 });
 
-  const body = schema.safeParse(await request.json());
+  const body = schema.safeParse(await request.json().catch(() => null));
   if (!body.success) return NextResponse.json({ error: "Name and department are required." }, { status: 400 });
+
+  const deskHost = isDeskSlug(body.data.departmentSlug) && canAddDeskMembers(session, body.data.departmentSlug);
+  if (!isBoardAdmin(session) && !deskHost) return NextResponse.json({ error: "Admins only" }, { status: 403 });
 
   const department = DEPARTMENTS.find((item) => item.slug === body.data.departmentSlug);
   if (!department) return NextResponse.json({ error: "Unknown department." }, { status: 400 });

@@ -197,7 +197,7 @@ export function inferDepartment(person: DepartmentPerson): DepartmentSlug | null
   if (/\belimu\b|\bsoko\b|\btil\b|\bchris\b|\baloyce\b/.test(text)) return "elimu-soko";
   if (/\bexpansion\b|\bzuhura\b/.test(text)) return "expansion";
   if (/\bmarketing\b|\bpartnership\b|\benrol/.test(text) || /\bkilusu\b|\bmattasia\b/.test(text)) return "marketing";
-  if (/\bhuman resource\b|\bhr\b|\brecruit|\bonboard|\btalent\b|\besther\b|\bvalentina\b/.test(text)) {
+  if (/\bhuman resource\b|\bhr\b|\brecruit|\bonboard|\btalent\b|\besther\b|\bvalentina\b|\bbwana\b/.test(text)) {
     return "hr";
   }
   if (/\bfinance\b|\baccount|\bbudget|\bfee\b|\blilian\b|\bimani\b|\bvaileth\b/.test(text)) return "finance";

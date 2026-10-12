@@ -96,6 +96,7 @@ const OWNER_DISPLAY: Record<string, string> = {
   francis: "Francis",
   shikunzi: "Shikunzi",
   kusaduka: "Kusaduka",
+  bwana: "Bwana",
   neema: "Neema George Emanuel",
   grace: "Grace Kambona",
   irene: "Irene Didass Machange",
@@ -361,6 +362,18 @@ export function uniqueTapRosterPeople() {
       people.set(key, { name: OWNER_DISPLAY[key] ?? person.name, slug });
     }
   }
+  for (const slug of ["hr", "marketing", "operations"] as const) {
+    const dept = tapDepartment(slug);
+    if (!dept) continue;
+    for (const item of dept.items) {
+      for (const owner of itemPeople(item)) {
+        if (isTeamOwner(owner) || isPlaceholderOwner(owner)) continue;
+        const key = tapOwnerKey(owner);
+        if (!key || people.has(key)) continue;
+        people.set(key, { name: OWNER_DISPLAY[key] ?? owner, slug });
+      }
+    }
+  }
   for (const person of supportPeople()) {
     people.set(`${person.slug}:${tapOwnerKey(person.name)}`, {
       name: person.name,
@@ -464,6 +477,37 @@ export function groupTapRocks(items: TapItem[]) {
     else rocks.push({ parent: item, children: [] });
   }
   return rocks;
+}
+
+export function departmentTapCatalog(slug: string) {
+  if (slug === "operations") return opsTapDeskCatalog();
+  const dept = tapDepartment(slug);
+  if (!dept) return [];
+  const items = dept.items.filter((item) => item.status !== "Removed");
+  return [
+    {
+      slug: dept.slug,
+      name: dept.name,
+      tap: dept.tap,
+      items,
+      rocks: groupTapRocks(items),
+    },
+  ];
+}
+
+export function deskCatalogPeople(slug: string) {
+  const dept = tapDepartment(slug);
+  if (!dept) return [];
+  const names = new Map<string, string>();
+  if (dept.responsible) names.set(tapOwnerKey(dept.responsible), OWNER_DISPLAY[tapOwnerKey(dept.responsible)] ?? dept.responsible);
+  for (const item of dept.items) {
+    for (const owner of itemPeople(item)) {
+      if (isTeamOwner(owner) || isPlaceholderOwner(owner)) continue;
+      const key = tapOwnerKey(owner);
+      if (!names.has(key)) names.set(key, OWNER_DISPLAY[key] ?? owner);
+    }
+  }
+  return [...names.values()];
 }
 
 export function opsTapDeskCatalog() {

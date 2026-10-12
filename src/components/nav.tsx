@@ -4,9 +4,22 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-function linksFor({ admin, opsDesk }: { admin: boolean; opsDesk?: boolean; departmentName?: string | null }) {
+function linksFor({
+  admin,
+  opsDesk,
+  hrDesk,
+  marketingDesk,
+}: {
+  admin: boolean;
+  opsDesk?: boolean;
+  hrDesk?: boolean;
+  marketingDesk?: boolean;
+  departmentName?: string | null;
+}) {
   const links = [{ href: "/today", label: "1-5's" }];
   if (opsDesk) links.push({ href: "/ops", label: "Ops TAP" });
+  if (hrDesk) links.push({ href: "/hr", label: "HR TAP" });
+  if (marketingDesk) links.push({ href: "/marketing", label: "Marketing TAP" });
   if (admin) {
     links.push({ href: "/board", label: "Admin board" }, { href: "/kpi", label: "KPI" }, { href: "/updates", label: "Updates" });
   } else {
@@ -26,17 +39,21 @@ export function Nav({
   unreadUpdates = 0,
   admin = false,
   opsDesk = false,
+  hrDesk = false,
+  marketingDesk = false,
   departmentName = null,
 }: {
   user: SessionUser;
   unreadUpdates?: number;
   admin?: boolean;
   opsDesk?: boolean;
+  hrDesk?: boolean;
+  marketingDesk?: boolean;
   departmentName?: string | null;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const links = linksFor({ admin, opsDesk, departmentName });
+  const links = linksFor({ admin, opsDesk, hrDesk, marketingDesk, departmentName });
 
   useEffect(() => {
     setOpen(false);

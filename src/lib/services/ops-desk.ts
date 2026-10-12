@@ -49,7 +49,7 @@ export function canViewOpsDesk(user: {
   role?: string | null;
   departmentSlug?: string | null;
 }) {
-  return isBoardAdmin(user) || isOpsLead(user) || isOpsCrew(user);
+  return isBoardAdmin(user) || isOpsLead(user) || isOpsCrew(user) || user.departmentSlug === "operations";
 }
 
 export function canRunOpsDesk(user: {

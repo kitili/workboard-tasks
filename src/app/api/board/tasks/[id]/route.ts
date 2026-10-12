@@ -64,13 +64,19 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "That card stays inside its department." }, { status: 403 });
     }
     const moving = body.status && body.status !== existing.status;
+    const sameDeptTap = Boolean(
+      existing.labels.includes("TAP") &&
+        existing.departmentSlug &&
+        session.departmentSlug &&
+        existing.departmentSlug === session.departmentSlug,
+    );
     const opsTapMove = Boolean(existing.labels.includes("TAP") && (isOpsLead(session) || isOpsCrew(session)));
     if (moving && !canMoveTask(existing, session.id, admin) && !opsTapMove) {
       return NextResponse.json({ error: "You can only move a card you own, or one shared with you." }, { status: 403 });
     }
     const assigning = body.shareWith || body.handoverTo || body.assigneeId !== undefined;
     const editing = Boolean(body.title && body.title !== existing.title);
-    if ((assigning || editing) && !canAssignTask(existing, session.id, admin, session.departmentSlug)) {
+    if ((assigning || editing) && !canAssignTask(existing, session.id, admin, session.departmentSlug) && !sameDeptTap) {
       return NextResponse.json({ error: "Only an admin or the card owner can edit, assign, or reassign this." }, { status: 403 });
     }
     if (!admin && assigning) {

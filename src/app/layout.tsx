@@ -4,7 +4,7 @@ import "@fontsource/montserrat/700.css";
 import "@fontsource/bai-jamjuree/400.css";
 import "@fontsource/bai-jamjuree/600.css";
 import { Nav } from "@/components/nav";
-import { isBoardAdmin, isOpsCrew, isOpsLead, isUpdatesAdmin } from "@/lib/auth/admin";
+import { isBoardAdmin, isHrMember, isMarketingMember, isOpsCrew, isOpsLead, isUpdatesAdmin } from "@/lib/auth/admin";
 import { departmentNameFor } from "@/lib/departments";
 import { syncUserDepartment } from "@/lib/services/departments";
 import { getSessionUser } from "@/lib/auth/session";
@@ -35,7 +35,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             }}
             unreadUpdates={unreadUpdates}
             admin={isBoardAdmin(user)}
-            opsDesk={isOpsLead(user) || isBoardAdmin(user) || isOpsCrew(user)}
+            opsDesk={isOpsLead(user) || isBoardAdmin(user) || isOpsCrew(user) || user.departmentSlug === "operations"}
+            hrDesk={isHrMember(user) || isBoardAdmin(user)}
+            marketingDesk={isMarketingMember(user) || isBoardAdmin(user)}
             departmentName={departmentNameFor({ ...user, departmentSlug })}
           />
         ) : null}

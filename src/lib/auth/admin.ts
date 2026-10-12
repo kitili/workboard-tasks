@@ -3,6 +3,7 @@ export type AdminPerson = {
   username?: string | null;
   email?: string | null;
   role?: string | null;
+  departmentSlug?: string | null;
 };
 
 function haystack(user: AdminPerson) {
@@ -64,6 +65,32 @@ export function opsDeskPersonLabel(user: AdminPerson | null | undefined): OpsDes
 
 export function isOpsCrew(user: AdminPerson | null | undefined) {
   return Boolean(opsCrewLabel(user));
+}
+
+export function isShikunzi(user: AdminPerson | null | undefined) {
+  return opsCrewLabel(user) === "Shikunzi";
+}
+
+export function isHrLead(user: AdminPerson | null | undefined) {
+  if (!user) return false;
+  return named(user, "esther", ["mwalyego"]);
+}
+
+export function isHrMember(user: AdminPerson | null | undefined) {
+  if (!user) return false;
+  if (user.departmentSlug === "hr" || isHrLead(user)) return true;
+  return named(user, "valentina") || named(user, "bwana");
+}
+
+export function isMarketingLead(user: AdminPerson | null | undefined) {
+  if (!user) return false;
+  return named(user, "kilusu", ["mattasia"]);
+}
+
+export function isMarketingMember(user: AdminPerson | null | undefined) {
+  if (!user) return false;
+  if (user.departmentSlug === "marketing" || isMarketingLead(user)) return true;
+  return named(user, "mariam");
 }
 
 export function isUpdatesAdmin(user: AdminPerson | null | undefined) {
