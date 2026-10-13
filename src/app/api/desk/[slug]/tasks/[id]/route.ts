@@ -6,7 +6,6 @@ import { canAssignDesk, canEditDeskTap, canGiveDeskTask, canViewDesk, isDeskSlug
 import { returnToTasksError } from "@/lib/board/columns";
 import { columnForSheetPhrase, isSheetPhrase, sheetCardPhrase, writeSheetPhrase, type SheetPhrase } from "@/lib/board/sheet-status";
 import { syncDailyItemStatus } from "@/lib/services/daily-sheet";
-import { noteLiveSheet } from "@/lib/services/google-tap-sheet";
 import { getDepartmentTapDesk } from "@/lib/services/department-desk";
 import { db } from "@/lib/db";
 
@@ -94,14 +93,24 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   });
   if (nextStatus && nextStatus !== task.status) {
     await syncDailyItemStatus(task.id, nextStatus as TaskStatus);
-  }
-  if (phrase || (nextStatus && nextStatus !== task.status)) {
-    const word = (phrase ?? sheetCardPhrase(nextStatus ?? task.status, task.description, task.departmentSlug ?? slug)) as SheetPhrase;
-    await noteLiveSheet({
-      labels: task.labels,
-      departmentSlug: task.departmentSlug ?? slug,
-      description: writeSheetPhrase(task.description, word),
-      status: nextStatus ?? task.status,
+    await db.taskActivity.create({
+      data: {
+        taskId: task.id,
+        type: "STATUS_CHANGED",
+        fromStatus: task.status,
+        toStatus: nextStatus as TaskStatus,
+        message: phrase ? `Sheet says ${phrase}` : "Moved on the department tab",
+      },
+    });
+  } else if (phrase) {
+    await db.taskActivity.create({
+      data: {
+        taskId: task.id,
+        type: "STATUS_CHANGED",
+        fromStatus: task.status,
+        toStatus: task.status,
+        message: `Sheet says ${phrase}`,
+      },
     });
   }
   const desk = await getDepartmentTapDesk(session.organizationId, slug, session.id);

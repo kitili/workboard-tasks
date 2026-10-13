@@ -78,6 +78,8 @@ export async function getDepartmentTapDesk(organizationId: string, slug: DeskSlu
   for (const item of slugs) {
     await syncTapTasks(organizationId, item);
   }
+  const { pullLiveTapSheet } = await import("@/lib/services/google-tap-sheet");
+  await pullLiveTapSheet(organizationId);
   const today = startOfDay(new Date());
 
   const [tasks, team] = await Promise.all([

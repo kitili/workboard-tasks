@@ -7,12 +7,12 @@ import { canAddDeskMembers } from "../src/lib/auth/desk";
 import { getKpiDashboard } from "../src/lib/services/kpi";
 import { pickDailyTapLineup } from "../src/lib/today/tap-lineup";
 import { syncTapTasks } from "../src/lib/services/tap-sync";
-import { noonHasPassed, selectDepartmentStaff, selectMissingDaily, sixPmHasPassed } from "../src/lib/board/missing-daily";
+import { noonHasPassed, selectDepartmentStaff, selectMissingDaily, sixPmHasPassed, startOfEatDay } from "../src/lib/board/missing-daily";
 import { returnToTasksError } from "../src/lib/board/columns";
 import { cellA1, findStatusCell } from "../src/lib/board/sheet-grid";
 import { sheetCardPhrase, sheetColumnTitle, writeSheetPhrase } from "../src/lib/board/sheet-status";
 import { canAssignDesk, canGiveDeskTask, canViewDesk, isDeskSlug } from "../src/lib/auth/desk";
-import { googleTapConfigured, pushRockStatus } from "../src/lib/services/google-tap-sheet";
+import { googleTapConfigured, pushRockStatus, tasksWithSheetAction } from "../src/lib/services/google-tap-sheet";
 import { syncAllUserDepartments } from "../src/lib/services/departments";
 
 const EXPECTED: Record<string, string[]> = {
@@ -213,6 +213,13 @@ async function main() {
   check(canGiveDeskTask({ name: "Francis" }, "operations", true) === true, "ops crew can still take a line themselves");
   check(canGiveDeskTask({ name: "Francis" }, "operations", false) === false, "ops crew cannot give a line to someone else");
   check(canAssignDesk({ name: "Jacqueline Karomo", departmentSlug: "ece" }, "ece") === true, "Jacqueline can give ECE tasks to ECE people");
+  const writtenBack = tasksWithSheetAction([{ id: "untouched" }, { id: "moved" }], ["moved"]);
+  check(writtenBack.length === 1 && writtenBack[0]?.id === "moved", "only a moved card is written back to Google");
+  check(tasksWithSheetAction([{ id: "untouched" }], []).length === 0, "no card moves means the Google Sheet is not written");
+  check(
+    startOfEatDay(new Date("2026-10-12T20:00:00+03:00")).toISOString() === "2026-10-11T21:00:00.000Z",
+    "the sheet day starts at midnight Tanzanian time",
+  );
   if (!googleTapConfigured()) {
     const pending = await pushRockStatus({ slug: "hr", code: "1.0", phrase: "Ongoing" });
     check(pending.skipped === true && pending.written === 0, "Google Sheet write waits until the workbook is connected");

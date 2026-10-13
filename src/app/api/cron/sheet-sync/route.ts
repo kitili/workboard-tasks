@@ -3,6 +3,7 @@ import { getDefaultOrganization } from "@/lib/data/dashboard";
 import { syncLiveSheet } from "@/lib/services/daily-sheet";
 
 function authorized(request: NextRequest) {
+  if (request.headers.get("x-vercel-cron") === "1") return true;
   const secret = process.env.CRON_SECRET || process.env.API_SECRET;
   if (!secret) return process.env.NODE_ENV !== "production";
   const header = request.headers.get("authorization");

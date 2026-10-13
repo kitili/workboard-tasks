@@ -60,7 +60,7 @@ function boardIntro({
   departmentName: string | null;
 }) {
   const done = preferredCompletedWord(departmentSlug);
-  const words = `On Schedule, Ongoing, Not Started, and ${done}. A touched card does not go back to On Schedule. Leftover On Schedule cards move to Not Started the next day. At 6pm Tanzanian time the sheet catches up with the cards.`;
+  const words = `On Schedule, Ongoing, Not Started, and ${done}. The app reads the Google Sheet. Cards you move are written back at 6pm Tanzanian time. If nobody moves a card, the Google Sheet stays as it is.`;
   if (admin && !mine) {
     if (!departmentSlug) return `Every TAP uses the sheet words: ${words}`;
     return `${departmentName ?? "This department"} uses the sheet words: ${words}`;

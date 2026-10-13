@@ -1,6 +1,15 @@
 import crypto from "node:crypto";
+import type { TaskStatus } from "@/generated/prisma/client";
+import { columnForStatus } from "@/lib/board/columns";
+import { startOfEatDay } from "@/lib/board/missing-daily";
 import { cellA1, findStatusCell, rockCodeFromLabels } from "@/lib/board/sheet-grid";
-import { sheetCardPhrase, type SheetPhrase } from "@/lib/board/sheet-status";
+import {
+  columnForSheetPhrase,
+  isSheetPhrase,
+  sheetCardPhrase,
+  writeSheetPhrase,
+  type SheetPhrase,
+} from "@/lib/board/sheet-status";
 import { db } from "@/lib/db";
 
 /** Tab titles in the TAP workbook. Matched loosely so a leading space still hits. */
@@ -140,27 +149,87 @@ export async function pushRockStatus(input: { slug: string; code: string; phrase
   }
 }
 
-export async function noteLiveSheet(task: {
-  labels: string[];
-  departmentSlug: string | null;
-  description: string | null;
-  status: string;
-}) {
-  const code = rockCodeFromLabels(task.labels);
-  if (!code || !task.departmentSlug) return { skipped: true, written: 0 };
-  const phrase = sheetCardPhrase(task.status, task.description, task.departmentSlug) as SheetPhrase;
-  return pushRockStatus({ slug: task.departmentSlug, code, phrase });
+/** Only rocks someone moved in the app are sent back to Google. */
+export function tasksWithSheetAction<T extends { id: string }>(tasks: T[], actedIds: Iterable<string>) {
+  const ids = new Set(actedIds);
+  return tasks.filter((task) => ids.has(task.id));
 }
 
-/** Nightly catch-up: every TAP rock’s current word is written to its Google tab. */
-export async function syncGoogleTapSheet(organizationId: string): Promise<PushResult> {
-  if (!googleTapConfigured()) return { skipped: true, written: 0 };
-  const tasks = await db.task.findMany({
-    where: { organizationId, labels: { has: "TAP" }, status: { not: "CANCELLED" } },
-    select: { labels: true, departmentSlug: true, description: true, status: true },
+const pullCache = new Map<string, number>();
+const PULL_TTL_MS = 2 * 60 * 1000;
+
+async function actedTaskIds(organizationId: string, since: Date) {
+  const rows = await db.taskActivity.findMany({
+    where: {
+      createdAt: { gte: since },
+      type: "STATUS_CHANGED",
+      task: { organizationId, labels: { has: "TAP" } },
+    },
+    select: { taskId: true },
   });
+  return new Set(rows.map((row) => row.taskId));
+}
+
+/** Read each department tab and apply its Status cell, unless that card was moved in the app today. */
+export async function pullLiveTapSheet(organizationId: string, options: { force?: boolean } = {}) {
+  if (!googleTapConfigured()) return { skipped: true, updated: 0 };
+  const last = pullCache.get(organizationId) ?? 0;
+  if (!options.force && Date.now() - last < PULL_TTL_MS) return { skipped: true, updated: 0 };
+  let updated = 0;
+  try {
+    const token = await accessToken();
+    const acted = await actedTaskIds(organizationId, startOfEatDay());
+    for (const slug of Object.keys(SHEET_TABS)) {
+      const tab = await resolvedTab(slug, token);
+      if (!tab) continue;
+      const rows = await readGrid(tab, token);
+      const tasks = await db.task.findMany({
+        where: { organizationId, departmentSlug: slug, labels: { has: "TAP" }, status: { not: "CANCELLED" } },
+        select: { id: true, labels: true, status: true, description: true, departmentSlug: true },
+      });
+      for (const task of tasks) {
+        if (acted.has(task.id)) continue;
+        const code = rockCodeFromLabels(task.labels);
+        if (!code) continue;
+        const cell = findStatusCell(rows, code);
+        if (!cell) continue;
+        const phrase = (rows[cell.row]?.[cell.column] ?? "").trim();
+        if (!isSheetPhrase(phrase)) continue;
+        const nextStatus = columnForSheetPhrase(phrase);
+        const nextDescription = writeSheetPhrase(task.description, phrase);
+        const samePhrase = sheetCardPhrase(task.status, task.description, task.departmentSlug) === phrase;
+        const sameColumn = columnForStatus(task.status) === nextStatus;
+        if (samePhrase && sameColumn && nextDescription === (task.description ?? "")) continue;
+        await db.task.update({
+          where: { id: task.id },
+          data: {
+            description: nextDescription,
+            status: nextStatus as TaskStatus,
+            completedAt: nextStatus === "COMPLETED" ? new Date() : nextStatus === columnForStatus(task.status) ? undefined : null,
+          },
+        });
+        updated += 1;
+      }
+    }
+    pullCache.set(organizationId, Date.now());
+  } catch (error) {
+    return { updated, error: error instanceof Error ? error.message : "Could not read the Google Sheet." };
+  }
+  return { updated };
+}
+
+/** At 6pm, write back only the TAP cards that were moved today. No moves means the Google Sheet is not touched. */
+export async function syncGoogleTapSheet(organizationId: string, now = new Date()): Promise<PushResult> {
+  if (!googleTapConfigured()) return { skipped: true, written: 0 };
+  const acted = await actedTaskIds(organizationId, startOfEatDay(now));
+  if (acted.size === 0) return { skipped: true, written: 0 };
+  const tasks = await db.task.findMany({
+    where: { organizationId, id: { in: [...acted] }, labels: { has: "TAP" }, status: { not: "CANCELLED" } },
+    select: { id: true, labels: true, departmentSlug: true, description: true, status: true },
+  });
+  const moved = tasksWithSheetAction(tasks, acted);
   const bySlug = new Map<string, Array<{ code: string; phrase: string }>>();
-  for (const task of tasks) {
+  for (const task of moved) {
     const code = rockCodeFromLabels(task.labels);
     if (!code || !task.departmentSlug || !sheetTitle(task.departmentSlug)) continue;
     const phrase = sheetCardPhrase(task.status, task.description, task.departmentSlug);
@@ -168,6 +237,7 @@ export async function syncGoogleTapSheet(organizationId: string): Promise<PushRe
     list.push({ code, phrase });
     bySlug.set(task.departmentSlug, list);
   }
+  if (bySlug.size === 0) return { skipped: true, written: 0 };
   let written = 0;
   const errors: string[] = [];
   try {

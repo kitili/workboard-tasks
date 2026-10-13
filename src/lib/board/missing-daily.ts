@@ -26,6 +26,12 @@ export function sixPmHasPassed(now = new Date()) {
   return eatHour(now) >= 18;
 }
 
+/** Midnight in East Africa, as an instant. */
+export function startOfEatDay(now = new Date()) {
+  const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Dar_es_Salaam" }).format(now);
+  return new Date(`${day}T00:00:00+03:00`);
+}
+
 export function noonHasPassed(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Africa/Dar_es_Salaam",

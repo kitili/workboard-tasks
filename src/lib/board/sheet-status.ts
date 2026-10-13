@@ -79,7 +79,7 @@ export function sheetCardPhrase(status: string, description: string | null | und
 }
 
 export function sheetDeskBlurb(doneWord: string = "Fully Completed") {
-  return `The live sheet uses On Schedule, Ongoing, Partially Completed, Behind Schedule, Not Started, and ${doneWord}. Moving a card writes that word on the sheet. Once a card is Ongoing or ${doneWord} it does not go back to On Schedule. Leftover On Schedule cards move to Not Started the next day. At 6pm Tanzanian time the sheet catches up with the cards.`;
+  return `The app reads the Google Sheet. On Schedule, Ongoing, Partially Completed, Behind Schedule, Not Started, and ${doneWord} stay in sync. A card you move is written back at 6pm Tanzanian time. If nobody moves a card, the Google Sheet is left as it is.`;
 }
 
 export const dataTechColumnTitle = sheetColumnTitle;

@@ -5,7 +5,6 @@ import { returnToTasksError } from "@/lib/board/columns";
 import { sheetCardPhrase, writeSheetPhrase, type SheetPhrase } from "@/lib/board/sheet-status";
 import { canEditOpsTap, canRunOpsDesk, getOpsTapDesk } from "@/lib/services/ops-desk";
 import { syncDailyItemStatus } from "@/lib/services/daily-sheet";
-import { noteLiveSheet } from "@/lib/services/google-tap-sheet";
 import { db } from "@/lib/db";
 
 const schema = z
@@ -58,11 +57,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   });
   if (nextStatus && nextStatus !== task.status) {
     await syncDailyItemStatus(task.id, nextStatus);
-    await noteLiveSheet({
-      labels: task.labels,
-      departmentSlug: task.departmentSlug,
-      description: writeSheetPhrase(task.description, sheetCardPhrase(nextStatus, task.description, task.departmentSlug) as SheetPhrase),
-      status: nextStatus,
+    await db.taskActivity.create({
+      data: {
+        taskId: task.id,
+        type: "STATUS_CHANGED",
+        fromStatus: task.status,
+        toStatus: nextStatus,
+        message: "Moved on the ops desk",
+      },
     });
   }
   const desk = await getOpsTapDesk(session.organizationId);

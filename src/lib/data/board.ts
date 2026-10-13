@@ -23,6 +23,8 @@ export async function getOrganizationBoard(
   organizationId: string,
   options: { assigneeId?: string; departmentSlug?: string | null } = {},
 ) {
+  const { pullLiveTapSheet } = await import("@/lib/services/google-tap-sheet");
+  await pullLiveTapSheet(organizationId);
   await parkUnfinishedDailyTasks(organizationId);
   await closeUntouchedAfterSix(organizationId);
   const [org, tasks, users, project] = await Promise.all([

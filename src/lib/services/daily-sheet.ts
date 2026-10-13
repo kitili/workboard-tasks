@@ -131,6 +131,15 @@ export async function parkUnfinishedDailyTasks(organizationId: string) {
     data: { status: "BACKLOG" },
   });
   await stampSheetPhrase(ids, "Not Started");
+  await db.taskActivity.createMany({
+    data: ids.map((taskId) => ({
+      taskId,
+      type: "STATUS_CHANGED" as const,
+      fromStatus: "TODO" as const,
+      toStatus: "BACKLOG" as const,
+      message: "Untouched task moved to Not Started",
+    })),
+  });
 }
 
 /** At 6pm East Africa Time, stamp every TAP card onto the live sheet in that department’s own words. */
@@ -140,11 +149,12 @@ export async function closeUntouchedAfterSix(organizationId: string, now = new D
 }
 
 export async function syncLiveSheet(organizationId: string, now = new Date()) {
+  const { pullLiveTapSheet, syncGoogleTapSheet } = await import("@/lib/services/google-tap-sheet");
+  await pullLiveTapSheet(organizationId, { force: true });
   await parkUnfinishedDailyTasks(organizationId);
   const closed = await closeUntouchedAfterSix(organizationId, now);
   if (!sixPmHasPassed(now)) return { ...closed, google: { skipped: true, written: 0 } };
-  const { syncGoogleTapSheet } = await import("@/lib/services/google-tap-sheet");
-  const google = await syncGoogleTapSheet(organizationId);
+  const google = await syncGoogleTapSheet(organizationId, now);
   return { ...closed, google };
 }
 
