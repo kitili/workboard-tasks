@@ -190,6 +190,14 @@ async function main() {
     ["Rocks", "1.0", "Ed Admin", "", "", "On Schedule"],
     ["", "2.0", "AI", "", "", "On Schedule"],
   ];
+  const liveOpsGrid = [
+    ["", "", "", "", "", "Status"],
+    ["Rocks", "1", "Transport", "", "", "Partially Completed"],
+    ["", "1.1", "Complete the transport system", "", "", "Ongoing"],
+  ];
+  const liveParent = findStatusCell(liveOpsGrid, "1.0");
+  check(liveParent?.row === 1 && liveParent.column === 5, "rock 1.0 finds column F on the live OPSP sheet where the code is 1");
+  check(findStatusCell(liveOpsGrid, "1.1")?.row === 2, "rock 1.1 stays on its own row");
   const dataTechCell = findStatusCell(dataTechGrid, "1.0");
   check(dataTechCell?.row === 2 && dataTechCell.column === 5, "Data & Tech status sits in column F beside rock 1.0");
   check(cellA1(dataTechCell?.row ?? 0, dataTechCell?.column ?? 0) === "F3", "Data & Tech rock 1.0 writes F3");

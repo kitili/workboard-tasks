@@ -16,10 +16,10 @@ import { db } from "@/lib/db";
 const SHEET_TABS: Record<string, string> = {
   "data-tech": "Q3&Q4 DATA & TECH TAP 2026",
   hr: "HUMAN RESOURCE - TAP 2026 Q3&Q4",
-  finance: "FINANCE TAP - 2026-Q3&Q4",
+  finance: " FINANCE TAP - 2026-Q3&Q4",
   marketing: "Q3 & Q4 Marketing & Partnership",
   operations: "Cluster - Operations TAP",
-  expansion: "Q3&4 - EXPANSION TAP 2026",
+  expansion: " Q3&4 - EXPANSION  TAP 2026",
   ece: "Cluster ECE TAP - Q3 & Q4",
   "elimu-soko": "Elimu Soko 2026",
   "usa-river": "Usa River TAP",
@@ -85,8 +85,56 @@ async function accessToken() {
   return payload.access_token;
 }
 
-async function spreadsheetId() {
-  return process.env.GOOGLE_TAP_SPREADSHEET_ID ?? "";
+/** 2026 Big 5 & Q3&4 OPSP. The workbook shared for the TAP desks. */
+const OPSP_SPREADSHEET_ID = "1vSxFNt8DNVKT44cCb9f4tFhgqH15gT4WF1XJ6JWnGww";
+
+function spreadsheetId() {
+  return process.env.GOOGLE_TAP_SPREADSHEET_ID || OPSP_SPREADSHEET_ID;
+}
+
+function parseCsv(text: string) {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (quoted) {
+      if (char === '"') {
+        if (text[index + 1] === '"') {
+          cell += '"';
+          index += 1;
+        } else quoted = false;
+      } else cell += char;
+      continue;
+    }
+    if (char === '"') quoted = true;
+    else if (char === ",") {
+      row.push(cell);
+      cell = "";
+    } else if (char === "\n") {
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+    } else if (char !== "\r") cell += char;
+  }
+  if (cell.length > 0 || row.length > 0) {
+    row.push(cell);
+    rows.push(row);
+  }
+  return rows;
+}
+
+/** The OPSP file is shared so anyone with the link can read it. */
+async function readPublicGrid(tab: string) {
+  const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId()}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`;
+  const response = await fetch(url, { redirect: "follow" });
+  const text = await response.text();
+  if (!response.ok || text.trim().startsWith("<")) {
+    throw new Error(`Could not read ${tab.trim()}.`);
+  }
+  return parseCsv(text);
 }
 
 async function resolvedTab(slug: string, token: string) {
@@ -172,17 +220,15 @@ async function actedTaskIds(organizationId: string, since: Date) {
 
 /** Read each department tab and apply its Status cell, unless that card was moved in the app today. */
 export async function pullLiveTapSheet(organizationId: string, options: { force?: boolean } = {}) {
-  if (!googleTapConfigured()) return { skipped: true, updated: 0 };
   const last = pullCache.get(organizationId) ?? 0;
   if (!options.force && Date.now() - last < PULL_TTL_MS) return { skipped: true, updated: 0 };
   let updated = 0;
   try {
-    const token = await accessToken();
     const acted = await actedTaskIds(organizationId, startOfEatDay());
     for (const slug of Object.keys(SHEET_TABS)) {
-      const tab = await resolvedTab(slug, token);
+      const tab = sheetTitle(slug);
       if (!tab) continue;
-      const rows = await readGrid(tab, token);
+      const rows = await readPublicGrid(tab);
       const tasks = await db.task.findMany({
         where: { organizationId, departmentSlug: slug, labels: { has: "TAP" }, status: { not: "CANCELLED" } },
         select: { id: true, labels: true, status: true, description: true, departmentSlug: true },
@@ -220,9 +266,15 @@ export async function pullLiveTapSheet(organizationId: string, options: { force?
 
 /** At 6pm, write back only the TAP cards that were moved today. No moves means the Google Sheet is not touched. */
 export async function syncGoogleTapSheet(organizationId: string, now = new Date()): Promise<PushResult> {
-  if (!googleTapConfigured()) return { skipped: true, written: 0 };
   const acted = await actedTaskIds(organizationId, startOfEatDay(now));
   if (acted.size === 0) return { skipped: true, written: 0 };
+  if (!googleTapConfigured()) {
+    return {
+      skipped: true,
+      written: 0,
+      error: "The OPSP sheet can be read, but it is not shared for editing yet.",
+    };
+  }
   const tasks = await db.task.findMany({
     where: { organizationId, id: { in: [...acted] }, labels: { has: "TAP" }, status: { not: "CANCELLED" } },
     select: { id: true, labels: true, departmentSlug: true, description: true, status: true },
@@ -243,11 +295,8 @@ export async function syncGoogleTapSheet(organizationId: string, now = new Date(
   try {
     const token = await accessToken();
     for (const [slug, items] of bySlug) {
-      const tab = await resolvedTab(slug, token);
-      if (!tab) {
-        errors.push(`No Google tab for ${slug}.`);
-        continue;
-      }
+      const tab = sheetTitle(slug);
+      if (!tab) continue;
       const rows = await readGrid(tab, token);
       const cells: Array<{ a1: string; phrase: string }> = [];
       for (const item of items) {

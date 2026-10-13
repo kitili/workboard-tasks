@@ -9,7 +9,7 @@ export function findStatusCell(rows: string[][], code: string) {
       const cell = (row[column] ?? "").trim();
       if (/^status\b/i.test(cell) && !/code/i.test(cell)) statusCol = column;
     }
-    if ((row[1] ?? "").trim() === wanted && statusCol >= 0) {
+    if (sameRockCode((row[1] ?? "").trim(), wanted) && statusCol >= 0) {
       return { row: rowIndex, column: statusCol };
     }
   }
@@ -25,6 +25,19 @@ export function cellA1(row: number, column: number) {
     n = Math.floor((n - 1) / 26);
   }
   return `${letters}${row + 1}`;
+}
+
+/** Parent rocks are 1.0 in the app and 1 on the live Google Sheet. */
+export function sameRockCode(cell: string, code: string) {
+  const left = parentRockCode(cell);
+  const right = parentRockCode(code);
+  return Boolean(left) && left === right;
+}
+
+function parentRockCode(value: string) {
+  const trimmed = value.trim();
+  const parent = trimmed.match(/^(\d+)\.0$/);
+  return parent ? parent[1] : trimmed;
 }
 
 export function rockCodeFromLabels(labels: string[] | null | undefined) {
