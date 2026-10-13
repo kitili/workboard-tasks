@@ -14,6 +14,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import type { DeskAllocation, DeskCard, DeskLine, DeskPerson } from "@/lib/services/department-desk";
 import type { DeskSlug } from "@/lib/auth/desk";
+import { departmentBySlug } from "@/lib/departments";
 import { Pager } from "@/components/pager";
 
 type Group = {
@@ -229,7 +230,7 @@ export function DepartmentTapDesk({
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <header className="overflow-hidden rounded-[2rem] bg-[#002368] px-6 py-6 text-white shadow-sm">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#80BFEC]">{slug === "operations" ? "Cluster operations" : slug === "hr" ? "Human resource" : slug === "data-tech" ? "Data & Tech" : "Marketing & partnership"}</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#80BFEC]">{departmentBySlug(slug)?.name ?? "Department"}</p>
         <h2 className="mt-1 text-3xl font-semibold" style={{ color: "#ffffff" }}>
           {title}
         </h2>
@@ -257,6 +258,16 @@ export function DepartmentTapDesk({
         </div>
         {catalogNames.length ? (
           <p className="mt-3 text-xs text-[#4f555f]">On the TAP: {catalogNames.join(" · ")}</p>
+        ) : null}
+        {canAssign ? (
+          <AddTaskForm
+            slug={slug}
+            people={team}
+            onAdded={(desk) => {
+              applyDesk(desk);
+              setNotice("Added. It is on their cards, and only this department can see it.");
+            }}
+          />
         ) : null}
         {canAddMembers ? <AddMemberForm slug={slug} onAdded={(desk) => { applyDesk(desk); setNotice("They can log in and move their own cards."); }} /> : null}
       </section>
@@ -467,6 +478,67 @@ function MineCard({ card }: { card: DeskCard }) {
   );
 }
 
+function AddTaskForm({
+  slug,
+  people,
+  onAdded,
+}: {
+  slug: DeskSlug;
+  people: DeskPerson[];
+  onAdded: (desk: { groups: Group[]; allocations: DeskAllocation[]; people: DeskPerson[]; myCards: DeskCard[] }) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [assigneeId, setAssigneeId] = useState(people[0]?.id ?? "");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setError("");
+    setPending(true);
+    const res = await fetch(`/api/desk/${slug}/tasks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, assigneeId }),
+    });
+    const data = (await res.json()) as { error?: string; desk?: { groups: Group[]; allocations: DeskAllocation[]; people: DeskPerson[]; myCards: DeskCard[] } };
+    setPending(false);
+    if (!res.ok) {
+      setError(data.error ?? "Could not add that task.");
+      return;
+    }
+    setTitle("");
+    if (data.desk) onAdded(data.desk);
+  }
+
+  return (
+    <form onSubmit={(event) => void submit(event)} className="mt-4 rounded-2xl bg-[#D9ECF9] px-4 py-3">
+      <p className="text-sm font-semibold text-[#002368]">Add a task for this department</p>
+      <p className="mt-1 text-xs text-[#4f555f]">It goes to someone on this team. Other departments do not see it.</p>
+      <div className="mt-3 flex flex-wrap items-end gap-2">
+        <label className="min-w-64 flex-1 text-xs font-semibold text-[#002368]">
+          Task
+          <input value={title} onChange={(event) => setTitle(event.target.value)} required className="mt-1 block w-full rounded-xl border border-[#002368]/15 px-3 py-1.5 text-sm" />
+        </label>
+        <label className="text-xs font-semibold text-[#002368]">
+          Give to
+          <select value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)} className="mt-1 block rounded-xl border border-[#002368]/15 px-3 py-1.5 text-sm">
+            {people.map((person) => (
+              <option key={person.id} value={person.id}>
+                {person.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="submit" disabled={pending || !assigneeId} className="on-navy rounded-full px-4 py-2 text-sm font-semibold">
+          {pending ? "Adding…" : "Add task"}
+        </button>
+      </div>
+      {error ? <p className="mt-2 text-sm text-[#9B2C2C]">{error}</p> : null}
+    </form>
+  );
+}
+
 function AddMemberForm({
   slug,
   onAdded,
@@ -560,7 +632,7 @@ function LineRow({
   const current = dayValue(line.dueDate);
   const currentStatus = boardStatus(line.status);
   const live = Boolean(line.taskId && line.owned);
-  const canGive = Boolean(live && (canAssign || true));
+  const canGive = live;
 
   return (
     <article className={`rounded-2xl px-3 py-3 ${rock ? "bg-[#F8FBFF]" : "bg-white"}`}>
@@ -641,7 +713,7 @@ function LineRow({
             })}
             <select
               defaultValue=""
-              disabled={busy}
+              disabled={busy || !canAssign}
               onChange={(event) => {
                 if (event.target.value && line.taskId) onShare(line.taskId, event.target.value);
                 event.currentTarget.value = "";

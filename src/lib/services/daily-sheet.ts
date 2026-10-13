@@ -141,7 +141,11 @@ export async function closeUntouchedAfterSix(organizationId: string, now = new D
 
 export async function syncLiveSheet(organizationId: string, now = new Date()) {
   await parkUnfinishedDailyTasks(organizationId);
-  return closeUntouchedAfterSix(organizationId, now);
+  const closed = await closeUntouchedAfterSix(organizationId, now);
+  if (!sixPmHasPassed(now)) return { ...closed, google: { skipped: true, written: 0 } };
+  const { syncGoogleTapSheet } = await import("@/lib/services/google-tap-sheet");
+  const google = await syncGoogleTapSheet(organizationId);
+  return { ...closed, google };
 }
 
 async function stampSheetPhrase(ids: string[], phrase: SheetPhrase) {

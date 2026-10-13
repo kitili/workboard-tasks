@@ -4,25 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-function desksFor({
-  opsDesk,
-  hrDesk,
-  marketingDesk,
-  dataTechDesk,
-}: {
-  opsDesk?: boolean;
-  hrDesk?: boolean;
-  marketingDesk?: boolean;
-  dataTechDesk?: boolean;
-}) {
-  return [
-    opsDesk ? { href: "/ops", label: "Ops" } : null,
-    hrDesk ? { href: "/hr", label: "HR" } : null,
-    marketingDesk ? { href: "/marketing", label: "Marketing" } : null,
-    dataTechDesk ? { href: "/data-tech", label: "Data & Tech" } : null,
-  ].filter((item): item is { href: string; label: string } => Boolean(item));
-}
-
 type SessionUser = {
   name: string | null;
   username: string | null;
@@ -33,24 +14,17 @@ export function Nav({
   user,
   unreadUpdates = 0,
   admin = false,
-  opsDesk = false,
-  hrDesk = false,
-  marketingDesk = false,
-  dataTechDesk = false,
+  desks = [],
 }: {
   user: SessionUser;
   unreadUpdates?: number;
   admin?: boolean;
-  opsDesk?: boolean;
-  hrDesk?: boolean;
-  marketingDesk?: boolean;
-  dataTechDesk?: boolean;
+  desks?: Array<{ href: string; label: string }>;
   departmentName?: string | null;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [desksOpen, setDesksOpen] = useState(false);
-  const desks = desksFor({ opsDesk, hrDesk, marketingDesk, dataTechDesk });
   const links = admin
     ? [
         { href: "/today", label: "1-5's" },

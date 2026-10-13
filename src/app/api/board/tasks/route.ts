@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { isBoardAdmin } from "@/lib/auth/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { allocateTaskKey } from "@/lib/board/task-key";
@@ -30,8 +31,28 @@ export async function POST(request: NextRequest) {
       select: { id: true, organizationId: true },
     });
 
-    if (!project) {
+    if (!project || project.organizationId !== session.organizationId) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+
+    let departmentSlug = session.departmentSlug;
+    if (body.assigneeId) {
+      const person = await db.user.findUnique({
+        where: { id: body.assigneeId },
+        select: { departmentSlug: true, organizationId: true },
+      });
+      if (!person || person.organizationId !== session.organizationId) {
+        return NextResponse.json({ error: "That person is not on this desk." }, { status: 404 });
+      }
+      if (
+        !isBoardAdmin(session) &&
+        session.departmentSlug &&
+        person.departmentSlug &&
+        person.departmentSlug !== session.departmentSlug
+      ) {
+        return NextResponse.json({ error: "Give this task to someone in your department." }, { status: 403 });
+      }
+      departmentSlug = person.departmentSlug ?? departmentSlug;
     }
 
     const taskKey = await allocateTaskKey(project.id);
@@ -52,7 +73,7 @@ export async function POST(request: NextRequest) {
         priority: body.priority ?? "MEDIUM",
         assigneeId: body.assigneeId,
         labels: body.labels ?? [],
-        departmentSlug: session.departmentSlug,
+        departmentSlug,
         storyPoints: body.storyPoints,
         dueDate: body.dueDate ? new Date(body.dueDate) : null,
         columnOrder: (maxOrder._max.columnOrder ?? -1) + 1,

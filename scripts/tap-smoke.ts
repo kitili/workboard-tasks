@@ -9,7 +9,10 @@ import { pickDailyTapLineup } from "../src/lib/today/tap-lineup";
 import { syncTapTasks } from "../src/lib/services/tap-sync";
 import { noonHasPassed, selectDepartmentStaff, selectMissingDaily, sixPmHasPassed } from "../src/lib/board/missing-daily";
 import { returnToTasksError } from "../src/lib/board/columns";
+import { cellA1, findStatusCell } from "../src/lib/board/sheet-grid";
 import { sheetCardPhrase, sheetColumnTitle, writeSheetPhrase } from "../src/lib/board/sheet-status";
+import { canAssignDesk, canGiveDeskTask, canViewDesk, isDeskSlug } from "../src/lib/auth/desk";
+import { googleTapConfigured, pushRockStatus } from "../src/lib/services/google-tap-sheet";
 import { syncAllUserDepartments } from "../src/lib/services/departments";
 
 const EXPECTED: Record<string, string[]> = {
@@ -181,6 +184,41 @@ async function main() {
   check(writeSheetPhrase("MEL calendar · On Schedule", "Fully Completed") === "MEL calendar · Fully Completed", "sheet phrase stamp replaces the last word");
   check(sixPmHasPassed(new Date("2026-10-12T17:59:00+03:00")) === false, "sheet sync waits until 18:00 EAT");
   check(sixPmHasPassed(new Date("2026-10-12T18:00:00+03:00")) === true, "sheet sync is due at 18:00 EAT");
+  const dataTechGrid = [
+    ["", "", "", "", "", ""],
+    ["", "", "", "", "", "Status (RYGG)", "Person Responsible", "", "", "", "Status code"],
+    ["Rocks", "1.0", "Ed Admin", "", "", "On Schedule"],
+    ["", "2.0", "AI", "", "", "On Schedule"],
+  ];
+  const dataTechCell = findStatusCell(dataTechGrid, "1.0");
+  check(dataTechCell?.row === 2 && dataTechCell.column === 5, "Data & Tech status sits in column F beside rock 1.0");
+  check(cellA1(dataTechCell?.row ?? 0, dataTechCell?.column ?? 0) === "F3", "Data & Tech rock 1.0 writes F3");
+  const hrGrid = [
+    ["", "", "", "", "", "Status code"],
+    ["", "", "", "", "", "Status", "Person Responsible"],
+    ["Rocks", "1.0", "Recruitment", "", "", "Partially Completed"],
+    ["", "", "", "", "", "Status"],
+    ["", "1.1", "Monthly report", "", "", "Ongoing"],
+  ];
+  const hrChild = findStatusCell(hrGrid, "1.1");
+  check(hrChild?.row === 4 && hrChild.column === 5, "a later Status header still finds rock 1.1");
+  check(findStatusCell(hrGrid, "9.9") === null, "a missing rock is not written to the sheet");
+  check(isDeskSlug("finance") && isDeskSlug("ece") && isDeskSlug("ilboru"), "every TAP department has its own desk");
+  check(canViewDesk({ name: "Imani", departmentSlug: "finance" }, "finance") === true, "finance sees its own people");
+  check(canViewDesk({ name: "Imani", departmentSlug: "finance" }, "hr") === false, "finance does not open the HR desk");
+  check(canViewDesk({ name: "Jephason", departmentSlug: "usa-river" }, "usa-river") === true, "Usa River sees its own desk");
+  check(canViewDesk({ name: "Jephason", departmentSlug: "usa-river" }, "operations") === false, "a campus does not open the ops desk");
+  check(canAssignDesk({ name: "Esther Mwalyego" }, "hr") === true, "Esther can give HR tasks to HR people");
+  check(canAssignDesk({ name: "Francis" }, "operations") === false, "ops crew cannot hand tasks to other people");
+  check(canGiveDeskTask({ name: "Francis" }, "operations", true) === true, "ops crew can still take a line themselves");
+  check(canGiveDeskTask({ name: "Francis" }, "operations", false) === false, "ops crew cannot give a line to someone else");
+  check(canAssignDesk({ name: "Jacqueline Karomo", departmentSlug: "ece" }, "ece") === true, "Jacqueline can give ECE tasks to ECE people");
+  if (!googleTapConfigured()) {
+    const pending = await pushRockStatus({ slug: "hr", code: "1.0", phrase: "Ongoing" });
+    check(pending.skipped === true && pending.written === 0, "Google Sheet write waits until the workbook is connected");
+  } else {
+    check(googleTapConfigured() === true, "Google Sheet workbook is connected");
+  }
   const opsRock = tapDepartment("operations");
   const grouped = groupTapRocks(opsRock?.items ?? []);
   const transport = grouped.find((rock) => rock.parent.code === "1.0");

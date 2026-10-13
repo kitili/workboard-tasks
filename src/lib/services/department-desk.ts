@@ -1,4 +1,5 @@
 import { startOfDay } from "date-fns";
+import { allocateTaskKey } from "@/lib/board/task-key";
 import { isNamedStaff } from "@/lib/board/missing-daily";
 import { opsDeskPersonLabel } from "@/lib/auth/admin";
 import { canAddDeskMembers, canAssignDesk, canEditDeskTap, type DeskSlug } from "@/lib/auth/desk";
@@ -87,6 +88,7 @@ export async function getDepartmentTapDesk(organizationId: string, slug: DeskSlu
         OR: [
           { labels: { has: "TAP" }, departmentSlug: { in: slugs } },
           { source: "DAILY", departmentSlug: { in: slugs } },
+          { source: "MANUAL", departmentSlug: { in: slugs } },
         ],
       },
       select: {
@@ -270,6 +272,40 @@ export async function addDeskMember(
     },
   });
   return { id: user.id, name: user.name, email: user.email };
+}
+
+export async function addDeskTask(
+  organizationId: string,
+  slug: DeskSlug,
+  input: { title: string; assigneeId: string; authorId: string },
+) {
+  const title = input.title.trim();
+  if (!title) throw new Error("Write the task first.");
+  const person = await db.user.findFirst({
+    where: { id: input.assigneeId, organizationId, isActive: true, departmentSlug: slug },
+    select: { id: true },
+  });
+  if (!person) throw new Error("Give this task to someone on this department.");
+  const project = await db.project.findFirst({ where: { organizationId, key: "D5" } });
+  if (!project) throw new Error("The task board is not ready yet.");
+  const taskKey = await allocateTaskKey(project.id);
+  const sharedWithIds = input.authorId === person.id ? [] : [input.authorId];
+  await db.task.create({
+    data: {
+      organizationId,
+      projectId: project.id,
+      assigneeId: person.id,
+      authorId: input.authorId,
+      moveOwnerId: person.id,
+      sharedWithIds,
+      taskKey,
+      title,
+      status: "TODO",
+      source: "MANUAL",
+      departmentSlug: slug,
+      columnOrder: 0,
+    },
+  });
 }
 
 export function deskPermissions(

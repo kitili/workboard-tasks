@@ -16,6 +16,7 @@ import { getSessionUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { getTaskDetail } from "@/lib/data/board";
 import { syncDailyItemStatus, syncDailyItemTitle } from "@/lib/services/daily-sheet";
+import { noteLiveSheet } from "@/lib/services/google-tap-sheet";
 
 const updateSchema = z.object({
   title: z.string().min(1).optional(),
@@ -158,6 +159,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     if (body.title && body.title !== existing.title) {
       await syncDailyItemTitle(task.id, body.title);
+    }
+
+    if (sheetPhrase || (nextStatus && nextStatus !== existing.status)) {
+      await noteLiveSheet({
+        labels: task.labels,
+        departmentSlug: task.departmentSlug,
+        description: task.description,
+        status: task.status,
+      });
     }
 
     if (nextStatus && nextStatus !== existing.status) {

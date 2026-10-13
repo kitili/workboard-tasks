@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import type { TaskStatus } from "@/generated/prisma/client";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/session";
-import { canAssignDesk, canEditDeskTap, canViewDesk, isDeskSlug } from "@/lib/auth/desk";
+import { canAssignDesk, canEditDeskTap, canGiveDeskTask, canViewDesk, isDeskSlug } from "@/lib/auth/desk";
 import { returnToTasksError } from "@/lib/board/columns";
 import { columnForSheetPhrase, isSheetPhrase, sheetCardPhrase, writeSheetPhrase, type SheetPhrase } from "@/lib/board/sheet-status";
 import { syncDailyItemStatus } from "@/lib/services/daily-sheet";
+import { noteLiveSheet } from "@/lib/services/google-tap-sheet";
 import { getDepartmentTapDesk } from "@/lib/services/department-desk";
 import { db } from "@/lib/db";
 
@@ -44,13 +45,20 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     where: { id },
     select: { id: true, labels: true, source: true, organizationId: true, description: true, status: true, sharedWithIds: true, departmentSlug: true },
   });
-  const onThisDesk = Boolean(task && (task.labels.includes("TAP") || (task.source === "DAILY" && task.departmentSlug === slug)));
+  const onThisDesk = Boolean(
+    task &&
+      (task.labels.includes("TAP") ||
+        ((task.source === "DAILY" || task.source === "MANUAL") && task.departmentSlug === slug)),
+  );
   if (!onThisDesk || task?.organizationId !== session.organizationId) {
     return NextResponse.json({ error: "That card is not on this tab." }, { status: 404 });
   }
 
   if (body.data.shareWith || body.data.assigneeId) {
     const otherId = body.data.shareWith ?? body.data.assigneeId;
+    if (!canGiveDeskTask(session, slug, otherId === session.id)) {
+      return NextResponse.json({ error: "You can give a task to yourself, or ask a lead to hand it on." }, { status: 403 });
+    }
     if (otherId) {
       const other = await db.user.findUnique({ where: { id: otherId }, select: { departmentSlug: true, organizationId: true } });
       if (!other || other.organizationId !== session.organizationId || other.departmentSlug !== slug) {
@@ -86,6 +94,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   });
   if (nextStatus && nextStatus !== task.status) {
     await syncDailyItemStatus(task.id, nextStatus as TaskStatus);
+  }
+  if (phrase || (nextStatus && nextStatus !== task.status)) {
+    const word = (phrase ?? sheetCardPhrase(nextStatus ?? task.status, task.description, task.departmentSlug ?? slug)) as SheetPhrase;
+    await noteLiveSheet({
+      labels: task.labels,
+      departmentSlug: task.departmentSlug ?? slug,
+      description: writeSheetPhrase(task.description, word),
+      status: nextStatus ?? task.status,
+    });
   }
   const desk = await getDepartmentTapDesk(session.organizationId, slug, session.id);
   return NextResponse.json({ desk });
